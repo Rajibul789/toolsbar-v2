@@ -1,0 +1,33 @@
+{
+  "name": "ToolsBar v2",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bullseye",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "Prisma.prisma",
+        "ms-vscode.vscode-typescript-next",
+        "formulahendry.auto-close-tag"
+      ],
+      "settings": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "editor.tabSize": 2,
+        "[typescript]":     { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+        "[typescriptreact]":{ "editor.defaultFormatter": "esbenp.prettier-vscode" }
+      }
+    }
+  },
+  "forwardPorts": [3000, 5555],
+  "portsAttributes": {
+    "3000": { "label": "Next.js App",   "onAutoForward": "notify" },
+    "5555": { "label": "Prisma Studio", "onAutoForward": "silent" }
+  },
+  "postCreateCommand": "npm install",
+  "remoteUser": "node"
+}
