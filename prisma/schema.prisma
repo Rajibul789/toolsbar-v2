@@ -1,0 +1,281 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ================================================================
+// ADMIN & AUTH
+// ================================================================
+
+model Admin {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  role         AdminRole     @default(EDITOR)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  posts        BlogPost[]
+  sessions     AdminSession[]
+
+  @@map("admins")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+}
+
+model AdminSession {
+  id        String   @id @default(cuid())
+  adminId   String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@map("admin_sessions")
+}
+
+// ================================================================
+// TOOLS
+// ================================================================
+
+model ToolCategory {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  icon        String?
+  color       String?
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tools Tool[]
+
+  @@map("tool_categories")
+}
+
+model Tool {
+  id             String        @id @default(cuid())
+  slug           String        @unique
+  name           String
+  shortDesc      String
+  longDesc       String?       @db.Text
+  categoryId     String
+  icon           String
+  accentColor    String        @default("cyan")
+
+  // Status flags
+  isActive       Boolean       @default(true)
+  isFeatured     Boolean       @default(false)
+  isNew          Boolean       @default(false)
+
+  // Ordering
+  order          Int           @default(0)
+  featuredOrder  Int?
+
+  // SEO
+  seoTitle       String?
+  seoDesc        String?
+  seoKeywords    String?
+
+  // Config
+  processingMode ProcessingMode @default(BROWSER)
+  backendUrl     String?
+  maxFileSizeMb  Int           @default(50)
+  acceptedTypes  String[]
+
+  // Stats
+  usageCount     Int           @default(0)
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  category       ToolCategory  @relation(fields: [categoryId], references: [id])
+  featuredSlide  FeaturedSlide?
+
+  @@index([isActive, order])
+  @@index([isFeatured])
+  @@index([categoryId])
+  @@map("tools")
+}
+
+enum ProcessingMode {
+  BROWSER
+  HYBRID
+  SERVER
+}
+
+model FeaturedSlide {
+  id              String   @id @default(cuid())
+  toolId          String   @unique
+  headline        String
+  subheadline     String?
+  ctaText         String   @default("Launch Tool")
+  backgroundStyle String?
+  badgeText       String?
+  order           Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  tool Tool @relation(fields: [toolId], references: [id], onDelete: Cascade)
+
+  @@map("featured_slides")
+}
+
+// ================================================================
+// BLOG
+// ================================================================
+
+model BlogCategory {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  description String?
+  color       String?
+  order       Int        @default(0)
+  createdAt   DateTime   @default(now())
+
+  posts BlogPost[]
+
+  @@map("blog_categories")
+}
+
+model BlogTag {
+  id        String        @id @default(cuid())
+  name      String
+  slug      String        @unique
+  createdAt DateTime      @default(now())
+
+  posts BlogPostTag[]
+
+  @@map("blog_tags")
+}
+
+model BlogPostTag {
+  postId String
+  tagId  String
+
+  post BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  BlogTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@map("blog_post_tags")
+}
+
+model BlogPost {
+  id             String      @id @default(cuid())
+  title          String
+  slug           String      @unique
+  excerpt        String
+  content        String      @db.Text
+  featuredImage  String?
+
+  // Author / category
+  authorId       String
+  categoryId     String
+
+  // Status
+  status         PostStatus  @default(DRAFT)
+  publishedAt    DateTime?
+  scheduledFor   DateTime?
+
+  // SEO
+  seoTitle       String?
+  seoDesc        String?
+  seoKeywords    String?
+  canonicalUrl   String?
+
+  // Schema
+  faqSchema      Json?
+
+  // Related
+  relatedToolSlug String?
+
+  // Stats
+  views          Int         @default(0)
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  author   Admin        @relation(fields: [authorId], references: [id])
+  category BlogCategory @relation(fields: [categoryId], references: [id])
+  tags     BlogPostTag[]
+
+  @@index([status, publishedAt])
+  @@index([categoryId])
+  @@index([slug])
+  @@map("blog_posts")
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+  ARCHIVED
+}
+
+// ================================================================
+// HOMEPAGE CONFIG
+// ================================================================
+
+model HomepageConfig {
+  id        String     @id @default(cuid())
+  key       String     @unique
+  value     String     @db.Text
+  type      ConfigType @default(TEXT)
+  group     String
+  label     String
+  updatedAt DateTime   @updatedAt
+
+  @@map("homepage_config")
+}
+
+enum ConfigType {
+  TEXT
+  RICHTEXT
+  JSON
+  BOOLEAN
+  NUMBER
+  IMAGE_URL
+}
+
+// ================================================================
+// SEO SETTINGS
+// ================================================================
+
+model SeoSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@map("seo_settings")
+}
+
+// ================================================================
+// ANALYTICS (lightweight, no PII)
+// ================================================================
+
+model ToolUsageStat {
+  id       String   @id @default(cuid())
+  toolSlug String
+  date     DateTime @default(now()) @db.Date
+  count    Int      @default(1)
+
+  @@unique([toolSlug, date])
+  @@index([toolSlug])
+  @@map("tool_usage_stats")
+}
