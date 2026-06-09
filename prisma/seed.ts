@@ -105,7 +105,7 @@ async function main() {
   }
 
   console.log("\n✅ Seed complete!");
-  console.log(`\n📋 Admin credentials:\n   Email:    admin@toolsbar.com\n   Password: ${password}`);
+  console.log(`\n📋 Admin credentials:\n   Email:    movieburststeam@gmail.com\n   Password: ${password}`);
 }
 
 main()

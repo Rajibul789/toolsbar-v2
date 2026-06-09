@@ -102,7 +102,7 @@ export function PdfSplit() {
       newDoc.addPage(copied);
 
       const uint8 = await newDoc.save();
-      const blob = new Blob([uint8], { type: "application/pdf" });
+      const blob = new Blob([uint8.buffer as ArrayBuffer], { type: "application/pdf" });
       out.push({
         name: `page_${String(pageNum).padStart(3, "0")}.pdf`,
         blob,

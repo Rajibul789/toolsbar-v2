@@ -72,7 +72,7 @@ export function PdfMerge() {
       await new Promise((r) => setTimeout(r, 300));
 
       const uint8 = await merged.save();
-      const blob = new Blob([uint8], { type: "application/pdf" });
+      const blob = new Blob([uint8.buffer as ArrayBuffer], { type: "application/pdf" });
 
       setResult(blob);
       setProgress(100);

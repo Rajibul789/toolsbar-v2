@@ -15,7 +15,7 @@ interface ToolCardProps {
 }
 
 function getLucideIcon(name: string) {
-  const icons = LucideIcons as Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>>;
+  const icons = LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>>;
   return icons[name] ?? icons["Wrench"];
 }
 

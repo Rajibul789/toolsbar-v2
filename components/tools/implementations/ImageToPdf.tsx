@@ -96,8 +96,8 @@ export function ImageToPdf() {
           const ratio = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
           const w = img.naturalWidth * ratio;
           const h = img.naturalHeight * ratio;
-          pdf.internal.pageSize.setWidth(w);
-          pdf.internal.pageSize.setHeight(h);
+          (pdf.internal.pageSize as { width: number; height: number }).width = w;
+          (pdf.internal.pageSize as { width: number; height: number }).height = h;
           pdf.addImage(imgData, "JPEG", 0, 0, w, h);
         } else {
           const pw = pageSizing === "a4" ? 210 : 216;

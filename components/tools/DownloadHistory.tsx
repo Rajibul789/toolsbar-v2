@@ -9,7 +9,7 @@ import { TOOLS_CONFIG, NEON_COLOR_MAP } from "@/config/tools.config";
 import { formatDateRelative } from "@/lib/utils";
 
 function getIcon(name: string) {
-  const icons = LucideIcons as Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>>;
+  const icons = LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>>;
   return icons[name] ?? icons["Wrench"];
 }
 

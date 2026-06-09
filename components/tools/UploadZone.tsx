@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import type { ReactNode } from "react";
 import { useDropzone, type Accept } from "react-dropzone";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, X, File } from "lucide-react";
@@ -17,7 +18,7 @@ interface UploadZoneProps {
   currentFiles?: File[];
   onRemoveFile?: (index: number) => void;
   accentColor?: NeonColor;
-  label?: string;
+  label?: ReactNode;
   sublabel?: string;
   disabled?: boolean;
   multiple?: boolean;

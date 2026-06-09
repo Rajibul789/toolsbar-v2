@@ -7,7 +7,7 @@ import * as LucideIcons from "lucide-react";
 import { TOOLS_CONFIG, NEON_COLOR_MAP, NEON_BG_CLASS, getPopularTools } from "@/config/tools.config";
 
 function getLucideIcon(name: string) {
-  const icons = LucideIcons as Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>>;
+  const icons = LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>>;
   return icons[name] ?? icons["Wrench"];
 }
 

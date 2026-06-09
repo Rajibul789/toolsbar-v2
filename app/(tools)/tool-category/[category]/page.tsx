@@ -13,7 +13,7 @@ import { ToolCard } from "@/components/tools/ToolCard";
 import { JsonLd } from "@/components/seo/JsonLd";
 
 function getLucideIcon(name: string) {
-  const icons = LucideIcons as Record<
+  const icons = LucideIcons as unknown as Record<
     string,
     React.ComponentType<{ className?: string; style?: React.CSSProperties }>
   >;
@@ -37,7 +37,7 @@ export async function generateMetadata({
   return {
     title: `${cat.name} – ${tools.length} Free Online Tools | ToolsBar`,
     description: `${cat.description} All ${tools.length} tools run directly in your browser — no uploads, no accounts required.`,
-    alternates: { canonical: `/tools/${category}` },
+    alternates: { canonical: `/tool-category/${category}` },
   };
 }
 
@@ -156,7 +156,7 @@ export default async function ToolCategoryPage({
               return (
                 <Link
                   key={c.id}
-                  href={`/tools/${c.id}`}
+                  href={`/tool-category/${c.id}`}
                   className="px-3 py-1.5 rounded-full text-xs font-mono transition-all border"
                   style={{
                     background: active ? `${color}12` : "transparent",
