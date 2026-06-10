@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Settings, Key, Bell, Shield } from "lucide-react";
+import { Settings, Key, Shield } from "lucide-react";
 
 export const metadata: Metadata = { title: "Admin Settings" };
 

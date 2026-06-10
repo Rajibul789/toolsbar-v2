@@ -119,6 +119,7 @@ export function ImageToWord() {
             {preview && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
                 <div className="rounded-xl overflow-hidden border border-neon-green/15 max-h-64">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={preview} alt="Preview" className="w-full object-contain max-h-64 bg-black/30" />
                 </div>
 

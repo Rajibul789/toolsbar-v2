@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Save, Eye, ArrowLeft, Image as ImageIcon, Plus, Trash2 } from "lucide-react";
+import { Save, ArrowLeft, Image as ImageIcon, Plus, Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";

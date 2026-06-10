@@ -16,7 +16,7 @@ export function CyberScanner({
   isActive = true,
 }: CyberScannerProps) {
   const [hexLines, setHexLines] = useState<string[]>([]);
-  const [scanPos, setScanPos] = useState(0);
+  const [, setScanPos] = useState(0);
 
   // Generate streaming hex data lines
   useEffect(() => {

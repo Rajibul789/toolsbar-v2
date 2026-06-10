@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Table, Download, Copy } from "lucide-react";
+import { Table } from "lucide-react";
 import { UploadZone } from "@/components/tools/UploadZone";
 import { CyberScanner } from "@/components/animations/CyberScanner";
 import { ResultReveal, DownloadButton } from "@/components/tools/ResultReveal";

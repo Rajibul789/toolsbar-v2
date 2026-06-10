@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, Calendar, Clock } from "lucide-react";
+import { ArrowLeft, Clock } from "lucide-react";
 
 const AUTHORS: Record<string, { name: string; role: string; bio: string; posts: number }> = {
   "toolsbar-team": {

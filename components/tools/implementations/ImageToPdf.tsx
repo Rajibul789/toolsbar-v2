@@ -179,6 +179,7 @@ export function ImageToPdf() {
                       onDragEnd={() => setDragIdx(null)}
                       className="relative group rounded-lg overflow-hidden cursor-grab active:cursor-grabbing aspect-square"
                       style={{ border: "1px solid rgba(0,245,255,0.1)", opacity: dragIdx === i ? 0.5 : 1 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={img.preview} alt="" className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
                         <GripVertical className="w-3.5 h-3.5 text-white" />

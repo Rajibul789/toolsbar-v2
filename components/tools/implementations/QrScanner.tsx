@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { QrCode, Camera, Upload, Copy, ExternalLink, X, CheckCircle2 } from "lucide-react";
+import { Camera, Upload, Copy, ExternalLink, X, CheckCircle2 } from "lucide-react";
 import { UploadZone } from "@/components/tools/UploadZone";
 import { toast } from "sonner";
 
@@ -20,9 +20,6 @@ export function QrScanner() {
 
   // Keep scanner ref so we can stop it
   const scannerRef = useRef<import("html5-qrcode").Html5Qrcode | null>(null);
-  // Track whether the camera div is mounted before starting
-  const cameraDivReady = useRef(false);
-
   // Cleanup on unmount
   useEffect(() => {
     return () => {

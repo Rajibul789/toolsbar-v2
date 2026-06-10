@@ -66,7 +66,7 @@ export default function AboutPage() {
               className="text-[10px] font-mono px-2.5 py-1 rounded inline-flex items-center gap-1.5 mb-4"
               style={{ background: "rgba(0,245,255,0.08)", border: "1px solid rgba(0,245,255,0.2)", color: "#00f5ff" }}
             >
-              // MISSION
+              {'// MISSION'}
             </div>
             <p className="text-text-primary font-mono text-base leading-relaxed mb-4">
               Our mission is to provide every person on the internet with access to

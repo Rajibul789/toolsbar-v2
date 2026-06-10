@@ -71,7 +71,7 @@ export function ToolsGrid() {
               </div>
 
               <Link
-                href={`/tools/${cat.id}`}
+                href={`/tool-category/${cat.id}`}
                 className="hidden sm:flex items-center gap-1.5 text-xs font-mono transition-all duration-200 group"
                 style={{ color: `${neonColor}70` }}
               >

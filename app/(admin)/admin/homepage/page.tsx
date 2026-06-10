@@ -6,7 +6,6 @@ export const metadata: Metadata = { title: "Homepage Builder" };
 
 export default function AdminHomepagePage() {
   const featured = TOOLS_CONFIG.filter((t) => t.isFeatured);
-  const popular  = TOOLS_CONFIG.filter((t) => t.isPopular);
 
   return (
     <div className="p-6 lg:p-8">

@@ -19,11 +19,6 @@ function getLucideIcon(name: string) {
   return icons[name] ?? icons["Wrench"];
 }
 
-const BADGE_VARIANTS: Record<string, string> = {
-  NEW:     "badge-neon-green",
-  POPULAR: "badge-neon-purple",
-  HOT:     "badge-neon-red",
-};
 
 export function ToolCard({ tool, index = 0, className }: ToolCardProps) {
   const Icon = getLucideIcon(tool.icon);

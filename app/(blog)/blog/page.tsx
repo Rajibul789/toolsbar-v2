@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Calendar, Clock, Tag } from "lucide-react";
+import { Calendar, Clock } from "lucide-react";
 import { BlogSearch } from "@/components/blog/BlogSearch";
 
 export const metadata: Metadata = {

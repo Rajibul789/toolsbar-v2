@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { PackageOpen, Plus, Trash2, FolderOpen, FileCode, Download, ChevronRight, ChevronDown } from "lucide-react";
+import { motion } from "framer-motion";
+import { PackageOpen, Plus, Trash2, FolderOpen, FileCode, ChevronRight, ChevronDown } from "lucide-react";
 import { downloadBlob } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -44,7 +44,11 @@ export function CodePackBuilder() {
   function toggleFolder(id: string) {
     setExpandedFolders((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   }

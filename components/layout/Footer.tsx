@@ -115,7 +115,7 @@ export function Footer() {
                 ))}
                 <li>
                   <Link
-                    href={`/tools/${cat.id}`}
+                    href={`/tool-category/${cat.id}`}
                     className="text-xs font-mono text-neon-cyan/50 hover:text-neon-cyan transition-colors"
                   >
                     View all →

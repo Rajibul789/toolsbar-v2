@@ -333,7 +333,7 @@ export default async function BlogPostPage({
           {/* Related tool CTA */}
           {relatedTool && (
             <div className="mt-12 rounded-2xl p-6" style={{ background: "rgba(0,245,255,0.04)", border: "1px solid rgba(0,245,255,0.12)" }}>
-              <p className="text-xs font-mono text-neon-cyan/60 uppercase tracking-widest mb-4">// Try the Tool</p>
+              <p className="text-xs font-mono text-neon-cyan/60 uppercase tracking-widest mb-4">{'// Try the Tool'}</p>
               <ToolCard tool={relatedTool} />
             </div>
           )}

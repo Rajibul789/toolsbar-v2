@@ -6,7 +6,6 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Zap } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { TOOLS_CONFIG, NEON_COLOR_MAP, NEON_BG_CLASS } from "@/config/tools.config";
-import type { ToolConfig } from "@/config/tools.config";
 
 const FEATURED_TOOLS = TOOLS_CONFIG.filter((t) => t.isFeatured);
 

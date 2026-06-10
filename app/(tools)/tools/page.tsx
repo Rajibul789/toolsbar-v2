@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { TOOLS_CONFIG, TOOL_CATEGORIES, searchTools } from "@/config/tools.config";
+import { TOOLS_CONFIG, TOOL_CATEGORIES } from "@/config/tools.config";
 import { ToolCard } from "@/components/tools/ToolCard";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { ToolsDirectoryClient } from "@/components/tools/ToolsDirectoryClient";

@@ -54,7 +54,7 @@ const PLATFORM_LIMITS: Record<Platform, number> = {
 
 function generateHashtags(topic: string, platform: Platform): string[] {
   const lower = topic.toLowerCase();
-  let tags: string[] = [];
+  const tags: string[] = [];
 
   // Find matching category
   for (const [key, data] of Object.entries(HASHTAG_DB)) {

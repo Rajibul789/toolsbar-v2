@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Star, Eye, EyeOff, BadgeCheck, ArrowUpDown } from "lucide-react";
+import { Star, Eye, EyeOff, BadgeCheck } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { TOOLS_CONFIG, TOOL_CATEGORIES, NEON_COLOR_MAP, NEON_BG_CLASS } from "@/config/tools.config";
 import { toast } from "sonner";

@@ -18,7 +18,7 @@ function getLucideIcon(name: string) {
   return icons[name] ?? icons["Wrench"];
 }
 
-function ToolRow({ slug, name, usedAt, showRemove, onRemove }: {
+function ToolRow({ slug, name: _name, usedAt, showRemove, onRemove }: {
   slug: string; name: string; usedAt?: number;
   showRemove?: boolean; onRemove?: () => void;
 }) {
@@ -71,7 +71,7 @@ function ToolRow({ slug, name, usedAt, showRemove, onRemove }: {
 export function HistoryPageClient() {
   const [tab, setTab] = useState<Tab>("recent");
   const { recentTools, clearHistory } = useToolsStore();
-  const { favorites, isFavorite, toggleFavorite } = useFavorites();
+  const { favorites, toggleFavorite } = useFavorites();
 
   const favTools = TOOLS_CONFIG.filter((t) => favorites.includes(t.slug));
 

@@ -6,7 +6,7 @@ import { ImageDown, ArrowDown } from "lucide-react";
 import { UploadZone } from "@/components/tools/UploadZone";
 import { CyberScanner } from "@/components/animations/CyberScanner";
 import { ResultReveal, DownloadButton } from "@/components/tools/ResultReveal";
-import { formatBytes, downloadBlob, readFileAsDataURL } from "@/lib/utils";
+import { formatBytes, downloadBlob } from "@/lib/utils";
 import { toast } from "sonner";
 
 type ProcessState = "idle" | "processing" | "complete" | "error";
@@ -27,7 +27,6 @@ export function ImageCompressor() {
   const [results, setResults] = useState<CompressResult[]>([]);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("");
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const onDrop = useCallback((dropped: File[]) => {
     setFiles((prev) => [...prev, ...dropped].slice(0, 10));
@@ -241,6 +240,7 @@ export function ImageCompressor() {
                       className="flex items-center gap-3 rounded-lg px-3 py-2.5"
                       style={{ background: "rgba(191,0,255,0.04)", border: "1px solid rgba(191,0,255,0.1)" }}
                     >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={r.dataUrl} alt="" className="w-8 h-8 object-cover rounded" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-mono text-text-primary truncate">{r.file.name}</p>

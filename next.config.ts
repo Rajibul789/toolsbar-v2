@@ -1,5 +1,13 @@
 import type { NextConfig } from "next";
 
+const CATEGORY_IDS = [
+  "pdf-tools",
+  "image-tools",
+  "text-tools",
+  "social-tools",
+  "developer-tools",
+];
+
 const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["framer-motion", "lucide-react"],
@@ -10,6 +18,15 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "images.unsplash.com" },
     ],
     formats: ["image/avif", "image/webp"],
+  },
+  async redirects() {
+    // 301 redirects: old /tools/[category-id] → /tool-category/[category-id]
+    // Preserves SEO link equity while resolving the dynamic route conflict.
+    return CATEGORY_IDS.map((id) => ({
+      source: `/tools/${id}`,
+      destination: `/tool-category/${id}`,
+      permanent: true,
+    }));
   },
   async headers() {
     return [

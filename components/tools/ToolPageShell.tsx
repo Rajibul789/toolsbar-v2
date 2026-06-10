@@ -109,7 +109,7 @@ export function ToolPageShell({ tool, children }: ToolPageShellProps) {
               <ChevronRight className="w-3 h-3" />
               <Link href="/tools"        className="hover:text-neon-cyan transition-colors">Tools</Link>
               <ChevronRight className="w-3 h-3" />
-              <Link href={`/tools/${tool.category}`} className="hover:text-neon-cyan transition-colors capitalize">
+              <Link href={`/tool-category/${tool.category}`} className="hover:text-neon-cyan transition-colors capitalize">
                 {tool.category.replace(/-/g, " ")}
               </Link>
               <ChevronRight className="w-3 h-3" />
