@@ -123,7 +123,7 @@ export default function AdminLoginPage() {
                 <input
                   {...register("email")}
                   type="email"
-                  placeholder="movieburststeam@gmail.com"
+                  placeholder="admin@toolbarv2.com"
                   className="input-cyber w-full pl-10"
                   autoComplete="email"
                 />
