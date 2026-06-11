@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ImageDown, ArrowDown } from "lucide-react";
 import { UploadZone } from "@/components/tools/UploadZone";
