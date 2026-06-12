@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Toaster }       from "sonner";
-import { ThemeProvider } from "@/components/providers/ThemeProvider";
-import { CursorEffect }  from "@/components/animations/CursorEffect";
+import { Toaster }             from "sonner";
+import { ThemeProvider }       from "@/components/providers/ThemeProvider";
+import { CursorEffect }        from "@/components/animations/CursorEffect";
+import { ErrorRevealProvider } from "@/lib/errors/error-context";
+import { ErrorBoundary }       from "@/lib/errors/error-boundary";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -29,7 +31,10 @@ export const metadata: Metadata = {
   publisher:  "ToolsBar",
   robots: {
     index: true, follow: true,
-    googleBot: { index: true, follow: true, "max-video-preview": -1, "max-image-preview": "large", "max-snippet": -1 },
+    googleBot: {
+      index: true, follow: true,
+      "max-video-preview": -1, "max-image-preview": "large", "max-snippet": -1,
+    },
   },
   openGraph: {
     type: "website", locale: "en_US",
@@ -63,32 +68,43 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning className={inter.variable}>
       <body className="antialiased font-body bg-abyss text-foreground">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          {/*
+            Error Reveal System providers.
+            ErrorRevealProvider: supplies the ON/OFF toggle to all error panels.
+            ErrorBoundary: catches any React render error that slips past
+            route-level error.tsx boundaries (e.g. errors inside providers).
+          */}
+          <ErrorRevealProvider>
+            <ErrorBoundary>
 
-          {/* Global grain texture */}
-          <div
-            className="pointer-events-none fixed inset-0 z-[2] opacity-[0.025]"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-            }}
-          />
+              {/* Global grain texture overlay */}
+              <div
+                className="pointer-events-none fixed inset-0 z-[2] opacity-[0.025]"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+                }}
+              />
 
-          {/* Custom cyberpunk cursor (desktop only) */}
-          <CursorEffect />
+              {/* Custom cyberpunk cursor (desktop only) */}
+              <CursorEffect />
 
-          {children}
+              {children}
 
-          <Toaster
-            position="bottom-right"
-            toastOptions={{
-              style: {
-                background: "rgba(10, 15, 30, 0.95)",
-                border: "1px solid rgba(0, 245, 255, 0.2)",
-                color: "#e2e8f0",
-                fontFamily: "var(--font-mono, monospace)",
-                fontSize: "0.875rem",
-              },
-            }}
-          />
+              <Toaster
+                position="bottom-right"
+                toastOptions={{
+                  style: {
+                    background: "rgba(10, 15, 30, 0.95)",
+                    border: "1px solid rgba(0, 245, 255, 0.2)",
+                    color: "#e2e8f0",
+                    fontFamily: "var(--font-mono, monospace)",
+                    fontSize: "0.875rem",
+                  },
+                }}
+              />
+
+            </ErrorBoundary>
+          </ErrorRevealProvider>
         </ThemeProvider>
       </body>
     </html>
