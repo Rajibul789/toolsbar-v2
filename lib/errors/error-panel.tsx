@@ -23,6 +23,7 @@ import {
   Clock, FileCode, User, Hash, Cpu, Shield, Flag,
 } from "lucide-react";
 import { useErrorReveal } from "./error-context";
+import { reportError } from "./reporter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -243,14 +244,120 @@ function CollapsibleSection({ title, icon: Icon, children, defaultOpen = false, 
   );
 }
 
+// ─── Shared Report Error button ───────────────────────────────────────────────
+// Used in both FriendlyErrorPage (user-facing) and ErrorPanel footer (developer).
+
+type ReportStatus = "idle" | "loading" | "success" | "error";
+
+interface ReportErrorButtonProps {
+  error:      Error & { digest?: string };
+  userId?:    string | null;
+  role?:      string | null;
+  route?:     string | null;
+  toolSlug?:  string | null;
+  blogSlug?:  string | null;
+  /** "friendly" = minimal text link · "developer" = styled panel button */
+  variant?:   "friendly" | "developer";
+}
+
+function ReportErrorButton({
+  error, userId, role, route, toolSlug, blogSlug, variant = "friendly",
+}: ReportErrorButtonProps) {
+  const [status,   setStatus]   = useState<ReportStatus>("idle");
+  const [reportId, setReportId] = useState<string | null>(null);
+
+  const handleReport = useCallback(async () => {
+    // Allow retry after error, block only while loading or already succeeded
+    if (status === "loading" || status === "success") return;
+    setStatus("loading");
+
+    const result = await reportError({
+      errorType:    error.name    || "Error",
+      errorMessage: error.message || "Unknown error",
+      stackTrace:   error.stack   ?? null,
+      route:        route         ?? null,
+      toolSlug:     toolSlug      ?? null,
+      blogSlug:     blogSlug      ?? null,
+      userId:       userId        ?? null,
+      role:         role          ?? null,
+      timestamp:    new Date().toISOString(),
+    });
+
+    if (result) {
+      setStatus("success");
+      setReportId(result.id);
+    } else {
+      setStatus("error");
+    }
+  }, [status, error, route, toolSlug, blogSlug, userId, role]);
+
+  const label =
+    status === "loading" ? "Submitting…"                          :
+    status === "success" ? `Reported · ID: ${reportId?.slice(-8)}` :
+    status === "error"   ? "Failed — tap to retry"                :
+    "Report this error";
+
+  if (variant === "developer") {
+    return (
+      <button
+        onClick={handleReport}
+        disabled={status === "loading" || status === "success"}
+        style={{
+          display: "flex", alignItems: "center", gap: "6px",
+          background: status === "success" ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
+          border: `1px solid ${status === "success" ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.2)"}`,
+          color: status === "success" ? "#22c55e"
+               : status === "loading" ? "rgba(239,68,68,0.35)"
+               : status === "error"   ? "#f87171"
+               : "rgba(239,68,68,0.6)",
+          fontSize: "11px", padding: "6px 12px", borderRadius: "4px",
+          cursor: status === "idle" || status === "error" ? "pointer" : "default",
+          fontFamily: "inherit",
+          transition: "all 0.2s",
+        }}
+      >
+        <Flag size={11} />
+        {label}
+      </button>
+    );
+  }
+
+  // Friendly variant — minimal text link style
+  return (
+    <button
+      onClick={handleReport}
+      disabled={status === "loading" || status === "success"}
+      style={{
+        marginTop: 16, background: "none", border: "none",
+        color: status === "success" ? "#22c55e"
+             : status === "error"   ? "#f87171"
+             : "rgba(255,255,255,0.25)",
+        fontSize: "12px",
+        cursor: status === "idle" || status === "error" ? "pointer" : "default",
+        fontFamily: "'JetBrains Mono', monospace",
+        display: "flex", alignItems: "center", gap: "4px",
+      }}
+    >
+      <Flag size={11} />
+      {label}
+    </button>
+  );
+}
+
 // ─── Friendly fallback (error reveal OFF) ────────────────────────────────────
 // Shown when the admin has disabled the Error Reveal toggle (Part 4).
 // Restores the original project cyberpunk aesthetic without exposing
 // any technical details to end users.
 
-function FriendlyErrorPage({ error, reset }: { error: Error & { digest?: string }; reset?: () => void }) {
+function FriendlyErrorPage({
+  error, reset, userId, userRole,
+}: {
+  error:     Error & { digest?: string };
+  reset?:    () => void;
+  userId?:   string | null;
+  userRole?: string | null;
+}) {
   const errorId = error.digest ?? `ERR-${Date.now().toString(36).toUpperCase()}`;
-  const [reported, setReported] = useState(false);
 
   return (
     <div style={{
@@ -362,20 +469,13 @@ function FriendlyErrorPage({ error, reset }: { error: Error & { digest?: string 
         </button>
       </div>
 
-      {/* Part 2: Report Error — placeholder wired in Part 2 */}
-      <button
-        onClick={() => setReported(true)}
-        style={{
-          marginTop: 16, background: "none", border: "none",
-          color: reported ? "#22c55e" : "rgba(255,255,255,0.25)",
-          fontSize: "12px", cursor: "pointer",
-          fontFamily: "'JetBrains Mono', monospace",
-          display: "flex", alignItems: "center", gap: "4px",
-        }}
-      >
-        <Flag size={11} />
-        {reported ? "Error reported — thank you" : "Report this error"}
-      </button>
+      {/* Part 2: Report Error — wired to /api/errors/report */}
+      <ReportErrorButton
+        error={error}
+        userId={userId}
+        role={userRole}
+        variant="friendly"
+      />
     </div>
   );
 }
@@ -439,7 +539,14 @@ export function ErrorPanel({
   }, [error, errorType, errorCode, errorDigest, route, firstAppFrame, timestamp, environment, browser, device, userId, userRole, componentStack]);
 
   if (!errorRevealEnabled) {
-    return <FriendlyErrorPage error={error} reset={reset} />;
+    return (
+      <FriendlyErrorPage
+        error={error}
+        reset={reset}
+        userId={userId}
+        userRole={userRole}
+      />
+    );
   }
 
   return (
@@ -637,14 +744,16 @@ export function ErrorPanel({
             <Shield size={11} />
             Error Reveal System · ToolsBar v2 · {environment}
           </div>
-          {/* Part 2: Report Error button will replace this placeholder */}
-          <button style={{
-            background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
-            color: "rgba(239,68,68,0.6)", fontSize: "11px", padding: "6px 12px",
-            borderRadius: "4px", cursor: "pointer", fontFamily: "inherit",
-          }}>
-            Report Error {/* wired in Part 2 */}
-          </button>
+          {/* Part 2: Report Error — wired to /api/errors/report */}
+          <ReportErrorButton
+            error={error}
+            userId={userId}
+            role={userRole}
+            route={route}
+            toolSlug={(error as { toolSlug?: string }).toolSlug ?? null}
+            blogSlug={(error as { blogSlug?: string }).blogSlug ?? null}
+            variant="developer"
+          />
         </div>
 
       </div>

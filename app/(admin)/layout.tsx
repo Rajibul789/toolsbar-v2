@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   Zap, LayoutDashboard, Wrench, BookOpen, Globe,
-  Tag, FolderOpen, Settings, TrendingUp, LogOut, Star,
+  Tag, FolderOpen, Settings, TrendingUp, LogOut, Star, Bug,
 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -20,6 +20,10 @@ const NAV = [
   { label: "Tags",           href: "/admin/tags",           icon: Tag },
   { label: "SEO",            href: "/admin/seo",            icon: TrendingUp },
   { label: "Settings",       href: "/admin/settings",       icon: Settings },
+];
+
+const DEVELOPER_NAV = [
+  { label: "Error Center", href: "/admin/error-center", icon: Bug },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -41,6 +45,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Nav */}
         <nav className="flex-1 py-4 overflow-y-auto">
+          {/* Main navigation */}
           <div className="space-y-0.5">
             {NAV.map(({ label, href, icon: Icon }) => (
               <Link key={href} href={href} className="admin-nav-item">
@@ -48,6 +53,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {label}
               </Link>
             ))}
+          </div>
+
+          {/* Developer Tools section */}
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: "rgba(239,68,68,0.12)" }}>
+            <p className="px-4 mb-1 text-[10px] font-mono font-bold tracking-widest uppercase"
+              style={{ color: "rgba(239,68,68,0.45)" }}>
+              Developer Tools
+            </p>
+            <div className="space-y-0.5">
+              {DEVELOPER_NAV.map(({ label, href, icon: Icon }) => (
+                <Link key={href} href={href}
+                  className="admin-nav-item"
+                  style={{ color: "rgba(239,68,68,0.65)" }}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  {label}
+                </Link>
+              ))}
+            </div>
           </div>
         </nav>
 

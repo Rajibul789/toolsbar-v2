@@ -279,3 +279,38 @@ model ToolUsageStat {
   @@index([toolSlug])
   @@map("tool_usage_stats")
 }
+
+// ================================================================
+// ERROR REPORTING  (Part 2 — user-submitted reports)
+// ================================================================
+
+enum ErrorStatus {
+  NEW
+  INVESTIGATING
+  FIXED
+  CLOSED
+}
+
+model ErrorReport {
+  id           String      @id @default(cuid())
+  errorType    String
+  errorMessage String      @db.Text
+  stackTrace   String?     @db.Text
+  route        String?
+  toolSlug     String?
+  blogSlug     String?
+  browser      String?
+  device       String?
+  userId       String?
+  role         String?
+  status       ErrorStatus @default(NEW)
+  timestamp    DateTime    @default(now())
+
+  @@index([errorType])
+  @@index([route])
+  @@index([toolSlug])
+  @@index([blogSlug])
+  @@index([timestamp])
+  @@index([status])
+  @@map("error_reports")
+}
