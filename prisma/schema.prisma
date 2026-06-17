@@ -281,6 +281,38 @@ model ToolUsageStat {
 }
 
 // ================================================================
+// ERROR LOGGING  (Part 5 — automatic server/client logging)
+// ================================================================
+
+model ErrorLog {
+  id             String      @id @default(cuid())
+  errorType      String
+  message        String      @db.Text
+  stackTrace     String?     @db.Text
+  fileName       String?
+  functionName   String?
+  componentName  String?
+  route          String?
+  toolSlug       String?
+  blogSlug       String?
+  userId         String?
+  role           String?
+  browser        String?
+  device         String?
+  environment    String      @default("production")
+  status         ErrorStatus @default(NEW)
+  createdAt      DateTime    @default(now())
+
+  @@index([errorType])
+  @@index([route])
+  @@index([toolSlug])
+  @@index([status])
+  @@index([createdAt])
+  @@index([environment])
+  @@map("error_logs")
+}
+
+// ================================================================
 // ERROR REPORTING  (Part 2 — user-submitted reports)
 // ================================================================
 

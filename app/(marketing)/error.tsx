@@ -4,18 +4,24 @@
  * app/(marketing)/error.tsx
  *
  * Error boundary for the Marketing route group.
- * Catches errors thrown during:
- *   - Homepage rendering (/)
- *   - About page (/about)
- *   - Contact page (/contact)
- *   - Legal pages (/privacy-policy, /terms, /disclaimer, /cookie-policy)
- *   - Any marketing page component failure
- *
- * Preserves the site header/footer — only the page content segment resets.
+ * Part 5: Auto-logs marketing page errors.
  */
 
 import { useEffect } from "react";
 import { ErrorPanel } from "@/lib/errors/error-panel";
+
+function autoLog(error: Error & { digest?: string }, route: string) {
+  fetch("/api/errors/log", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      errorType:  error.name    || "MarketingError",
+      message:    error.message || "Marketing page error",
+      stackTrace: error.stack   ?? null,
+      route,
+    }),
+  }).catch(() => {});
+}
 
 export default function MarketingError({
   error,
@@ -25,18 +31,11 @@ export default function MarketingError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[marketing/error.tsx] Marketing page error:", error);
-    if (error.digest) console.error("[marketing/error.tsx] Digest:", error.digest);
+    console.error("[marketing/error.tsx] Marketing error:", error);
+    const route = typeof window !== "undefined" ? window.location.pathname : "/";
+    autoLog(error, route);
   }, [error]);
 
-  const route =
-    typeof window !== "undefined" ? window.location.pathname : "/";
-
-  return (
-    <ErrorPanel
-      error={error}
-      reset={reset}
-      route={route}
-    />
-  );
+  const route = typeof window !== "undefined" ? window.location.pathname : "/";
+  return <ErrorPanel error={error} reset={reset} route={route} />;
 }

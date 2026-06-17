@@ -3,6 +3,7 @@ import { z } from "zod";
 import prisma from "@/lib/db";
 import { getAdminFromToken } from "@/lib/auth";
 import { cookies } from "next/headers";
+import { logApiError } from "@/lib/errors/logger";
 
 const updateSchema = z.object({
   isActive:     z.boolean().optional(),
@@ -23,7 +24,8 @@ export async function GET() {
       include: { category: true, featuredSlide: true },
     });
     return NextResponse.json(tools);
-  } catch {
+  } catch (err) {
+    await logApiError(err, { route: "/api/admin/tools" });
     return NextResponse.json({ error: "Failed to fetch tools" }, { status: 500 });
   }
 }
@@ -71,6 +73,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json(tool);
   } catch (err) {
     console.error(err);
+    await logApiError(err, { route: "/api/admin/tools" });
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
 }

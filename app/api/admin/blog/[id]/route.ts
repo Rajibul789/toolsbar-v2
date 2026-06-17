@@ -3,6 +3,7 @@ import { z } from "zod";
 import prisma from "@/lib/db";
 import { getAdminFromToken } from "@/lib/auth";
 import { cookies } from "next/headers";
+import { logApiError } from "@/lib/errors/logger";
 
 const updateSchema = z.object({
   title:           z.string().min(5).optional(),
@@ -36,7 +37,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     });
     if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(post);
-  } catch {
+  } catch (err) {
+    await logApiError(err, { route: "/api/admin/blog/[id]" });
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
@@ -56,7 +58,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const post = await prisma.blogPost.update({ where: { id }, data });
     return NextResponse.json(post);
-  } catch {
+  } catch (err) {
+    await logApiError(err, { route: "/api/admin/blog/[id]" });
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
 }
@@ -69,7 +72,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   try {
     await prisma.blogPost.delete({ where: { id } });
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (err) {
+    await logApiError(err, { route: "/api/admin/blog/[id]" });
     return NextResponse.json({ error: "Delete failed" }, { status: 500 });
   }
 }

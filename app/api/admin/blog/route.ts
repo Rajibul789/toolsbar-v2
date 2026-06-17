@@ -3,6 +3,7 @@ import { z } from "zod";
 import prisma from "@/lib/db";
 import { getAdminFromToken } from "@/lib/auth";
 import { cookies } from "next/headers";
+import { logApiError } from "@/lib/errors/logger";
 
 const createSchema = z.object({
   title:           z.string().min(5),
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ posts, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {
     console.error(err);
+    await logApiError(err, { route: "/api/admin/blog" });
     return NextResponse.json({ error: "Failed to fetch posts" }, { status: 500 });
   }
 }
@@ -96,6 +98,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(post, { status: 201 });
   } catch (err) {
     console.error(err);
+    await logApiError(err, { route: "/api/admin/blog" });
     return NextResponse.json({ error: "Failed to create post" }, { status: 500 });
   }
 }

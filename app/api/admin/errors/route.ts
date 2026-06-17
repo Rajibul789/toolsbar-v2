@@ -20,6 +20,7 @@ import { cookies } from "next/headers";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { getAdminFromToken } from "@/lib/auth";
+import { logApiError } from "@/lib/errors/logger";
 
 export async function GET(req: NextRequest) {
   // ── Auth ─────────────────────────────────────────────────────────
@@ -219,6 +220,7 @@ export async function GET(req: NextRequest) {
 
   } catch (err) {
     console.error("[api/admin/errors GET]", err);
+    await logApiError(err, { route: "/api/admin/errors" });
     return NextResponse.json({ error: "Failed to fetch error reports" }, { status: 500 });
   }
 }

@@ -19,6 +19,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/db";
+import { logApiError } from "@/lib/errors/logger";
 
 // ─── Validation schema ────────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     // Log server-side for debugging — never expose raw error to client
     console.error("[api/errors/report] Failed to save report:", err);
+    await logApiError(err, { route: "/api/errors/report" });
     return NextResponse.json(
       { error: "Failed to save report" },
       { status: 500 }

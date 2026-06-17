@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { logAuthError } from "@/lib/errors/logger";
 
 const schema = z.object({
   email:    z.string().email(),
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error("Login error:", err);
+    await logAuthError(err, { route: "/api/auth/admin-login" });
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

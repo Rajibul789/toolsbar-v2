@@ -4,19 +4,24 @@
  * app/(admin)/error.tsx
  *
  * Error boundary for the entire Admin Panel route group.
- * Catches errors thrown in: /admin/*, /admin/tools, /admin/blog,
- * /admin/settings, /admin/categories, /admin/tags, /admin/homepage, /admin/seo.
- *
- * Admin errors ALWAYS show the full developer panel regardless of the
- * errorRevealEnabled toggle — admins need technical details to diagnose issues.
- * (Toggle behaviour wired in Part 4.)
- *
- * Preserves the admin layout (sidebar, header) — only the crashed page
- * segment resets, not the surrounding navigation.
+ * Part 5: Auto-logs admin errors to ErrorLog table.
  */
 
 import { useEffect } from "react";
 import { ErrorPanel } from "@/lib/errors/error-panel";
+
+function autoLog(error: Error & { digest?: string }, route: string) {
+  fetch("/api/errors/log", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      errorType:  error.name    || "AdminError",
+      message:    error.message || "Admin panel error",
+      stackTrace: error.stack   ?? null,
+      route,
+    }),
+  }).catch(() => {});
+}
 
 export default function AdminError({
   error,
@@ -27,19 +32,10 @@ export default function AdminError({
 }) {
   useEffect(() => {
     console.error("[admin/error.tsx] Admin panel error:", error);
-    if (error.digest) console.error("[admin/error.tsx] Digest:", error.digest);
+    const route = typeof window !== "undefined" ? window.location.pathname : "/admin";
+    autoLog(error, route);
   }, [error]);
 
-  // Derive route context from window (safe — error.tsx is always "use client")
-  const route =
-    typeof window !== "undefined" ? window.location.pathname : "/admin";
-
-  return (
-    <ErrorPanel
-      error={error}
-      reset={reset}
-      route={route}
-      // userRole injected by session context in Part 4
-    />
-  );
+  const route = typeof window !== "undefined" ? window.location.pathname : "/admin";
+  return <ErrorPanel error={error} reset={reset} route={route} />;
 }

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { PDFDocument } from "pdf-lib";
+import { logApiError } from "@/lib/errors/logger";
 
 // Node.js runtime — gives us access to full memory for large PDFs
 export const runtime = "nodejs";
@@ -110,6 +111,7 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "PDF processing failed";
     console.error("[/api/pdf/split] Error:", err);
+    await logApiError(err, { route: "/api/pdf/split", toolSlug: "pdf-split" });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

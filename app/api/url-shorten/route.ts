@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { SITE_CONFIG } from "@/config/site.config";
+import { logApiError } from "@/lib/errors/logger";
 
 const schema = z.object({
   url: z.string().url(),
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(data);
   } catch (err) {
     console.error("URL shortener error:", err);
+    await logApiError(err, { route: "/api/url-shorten", toolSlug: "url-shortener" });
     return NextResponse.json({ error: "Failed to shorten URL" }, { status: 500 });
   }
 }

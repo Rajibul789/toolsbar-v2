@@ -10,6 +10,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import prisma from "@/lib/db";
 import { getAdminFromToken } from "@/lib/auth";
+import { logApiError } from "@/lib/errors/logger";
 
 const patchSchema = z.object({
   status: z.enum(["NEW", "INVESTIGATING", "FIXED", "CLOSED"]),
@@ -52,7 +53,8 @@ export async function PATCH(
       select: { id: true, status: true },
     });
     return NextResponse.json(updated);
-  } catch {
+  } catch (err) {
+    await logApiError(err, { route: "/api/admin/errors/[id]" });
     return NextResponse.json({ error: "Report not found or update failed" }, { status: 404 });
   }
 }
@@ -70,7 +72,8 @@ export async function DELETE(
   try {
     await prisma.errorReport.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (err) {
+    await logApiError(err, { route: "/api/admin/errors/[id]" });
     return NextResponse.json({ error: "Report not found" }, { status: 404 });
   }
 }
