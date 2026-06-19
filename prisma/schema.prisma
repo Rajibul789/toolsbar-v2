@@ -43,6 +43,7 @@ model AdminSession {
   admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([token])
+  @@index([adminId])
   @@map("admin_sessions")
 }
 
@@ -172,6 +173,7 @@ model BlogPostTag {
   tag  BlogTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([postId, tagId])
+  @@index([tagId])
   @@map("blog_post_tags")
 }
 
@@ -216,6 +218,7 @@ model BlogPost {
 
   @@index([status, publishedAt])
   @@index([categoryId])
+  @@index([authorId])
   @@index([slug])
   @@map("blog_posts")
 }
