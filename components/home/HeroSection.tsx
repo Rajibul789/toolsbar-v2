@@ -158,7 +158,7 @@ export function HeroSection() {
               <div className={cn("corner-bracket bl transition-opacity", isFocused ? "opacity-100" : "opacity-0")} />
               <div className={cn("corner-bracket br transition-opacity", isFocused ? "opacity-100" : "opacity-0")} />
 
-              <div className="flex items-center gap-3 px-5 py-4 rounded-xl"
+              <div className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-5 sm:py-4 rounded-xl"
                 style={{
                   background: "rgba(10,15,30,0.85)",
                   border: `1px solid ${isFocused ? "rgba(0,245,255,0.4)" : "rgba(0,245,255,0.15)"}`,
@@ -173,11 +173,11 @@ export function HeroSection() {
                   onChange={(e) => handleSearch(e.target.value)}
                   onFocus={() => setIsFocused(true)}
                   onBlur={() => setTimeout(() => setIsFocused(false), 150)}
-                  className="flex-1 bg-transparent outline-none font-mono text-sm text-text-primary placeholder:text-text-muted"
+                  className="flex-1 min-w-0 bg-transparent outline-none font-mono text-sm text-text-primary placeholder:text-text-muted"
                 />
                 <button
                   type="submit"
-                  className="btn-solid-cyan px-4 py-1.5 text-xs rounded-lg flex-shrink-0"
+                  className="btn-solid-cyan px-3 py-1.5 sm:px-4 text-xs rounded-lg flex-shrink-0 whitespace-nowrap"
                 >
                   SEARCH
                 </button>
