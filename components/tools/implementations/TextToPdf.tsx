@@ -245,7 +245,7 @@ export function TextToPdf() {
       </div>
 
       {/* Editor / Preview */}
-      <div className={`gap-4 ${viewMode === "split" ? "grid grid-cols-2" : "block"}`} style={{ minHeight: 400 }}>
+      <div className={`gap-4 ${viewMode === "split" ? "grid grid-cols-1 lg:grid-cols-2" : "block"}`} style={{ minHeight: 400 }}>
         {viewMode !== "preview" && (
           <div className="flex flex-col" style={{ minHeight: 400 }}>
             <div className="text-[10px] font-mono px-3 py-1.5 rounded-t-lg flex items-center gap-2"

@@ -164,7 +164,7 @@ export function PdfCompress() {
                   <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-3">
                     Compression Level
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {LEVELS.map(({ id, label, desc }) => (
                       <button
                         key={id}
@@ -212,19 +212,19 @@ export function PdfCompress() {
           <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <ResultReveal onReset={handleReset} successMessage="COMPRESSION COMPLETE">
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   {[
                     { label: "Original",   value: formatBytes(file!.size),  color: "text-text-muted" },
                     { label: "Saved",      value: `${savings}%`,            color: "text-neon-green" },
                     { label: "Compressed", value: formatBytes(result.size), color: "#ff6600" },
                   ].map(({ label, value, color }) => (
-                    <div key={label} className="rounded-lg p-3 text-center"
+                    <div key={label} className="rounded-lg p-2 sm:p-3 text-center overflow-hidden"
                       style={{ background: "rgba(255,102,0,0.05)", border: "1px solid rgba(255,102,0,0.12)" }}>
-                      <p className={`text-lg font-display font-black ${color.startsWith("text-") ? color : ""}`}
+                      <p className={`text-sm sm:text-lg font-display font-black truncate ${color.startsWith("text-") ? color : ""}`}
                         style={!color.startsWith("text-") ? { color } : {}}>
                         {value}
                       </p>
-                      <p className="text-[11px] font-mono text-text-muted">{label}</p>
+                      <p className="text-[10px] sm:text-[11px] font-mono text-text-muted truncate">{label}</p>
                     </div>
                   ))}
                 </div>

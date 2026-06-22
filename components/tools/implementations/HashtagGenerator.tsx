@@ -176,7 +176,7 @@ export function HashtagGenerator() {
         {generated && tags.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
             {/* Stats + copy */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-mono text-text-muted">
                 {tags.length}/{PLATFORM_LIMITS[platform]} tags generated
               </span>

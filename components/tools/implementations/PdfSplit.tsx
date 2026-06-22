@@ -390,7 +390,7 @@ export function PdfSplit() {
               <div className="space-y-4">
                 {/* Summary row */}
                 <div
-                  className="flex items-center justify-between rounded-xl px-5 py-3"
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl px-5 py-4 sm:py-3"
                   style={{ background: "rgba(0,245,255,0.04)", border: "1px solid rgba(0,245,255,0.12)" }}
                 >
                   <div>
@@ -403,6 +403,7 @@ export function PdfSplit() {
                     onClick={downloadAll}
                     label={results.length === 1 ? "Download Page" : "Download All as ZIP"}
                     color="cyan"
+                    className="w-full sm:w-auto"
                   />
                 </div>
 
@@ -415,7 +416,7 @@ export function PdfSplit() {
                       style={{ background: "rgba(0,245,255,0.03)", border: "1px solid rgba(0,245,255,0.08)" }}
                     >
                       <span className="text-xs font-mono text-neon-cyan/50 w-6 flex-shrink-0">{i + 1}</span>
-                      <span className="flex-1 text-xs font-mono text-text-primary">{r.name}</span>
+                      <span className="flex-1 min-w-0 truncate text-xs font-mono text-text-primary">{r.name}</span>
                       <span className="text-[11px] font-mono text-text-muted flex-shrink-0">{formatBytes(r.size)}</span>
                       <button
                         onClick={() => downloadBlob(r.blob, r.name)}

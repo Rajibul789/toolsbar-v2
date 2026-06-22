@@ -193,12 +193,12 @@ export function ImageConverter() {
                   <div key={i} className="flex items-center gap-3 rounded-lg px-4 py-2.5"
                     style={{ background: "rgba(191,0,255,0.05)", border: "1px solid rgba(191,0,255,0.12)" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={r.dataUrl} alt="" className="w-10 h-10 object-cover rounded" />
+                    <img src={r.dataUrl} alt="" className="w-10 h-10 object-cover rounded flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-mono text-text-primary truncate">{r.name}</p>
                       <p className="text-[11px] font-mono text-text-muted">{formatBytes(r.size)}</p>
                     </div>
-                    <DownloadButton onClick={() => downloadBlob(r.blob, r.name)} label="Save" color="purple" className="text-xs px-3 py-1.5" />
+                    <DownloadButton onClick={() => downloadBlob(r.blob, r.name)} label="Save" color="purple" className="text-xs px-3 py-1.5 flex-shrink-0" />
                   </div>
                 ))}
 

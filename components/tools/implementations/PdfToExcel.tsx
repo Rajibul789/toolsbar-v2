@@ -166,16 +166,16 @@ export function PdfToExcel() {
             <ResultReveal onReset={handleReset} successMessage="EXTRACTION COMPLETE">
               <div className="space-y-4">
                 {/* Stats */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   {[
                     { label: "Pages",    value: pageCount },
                     { label: "Rows",     value: rows.length },
                     { label: "File",     value: `${(result.size / 1024).toFixed(0)} KB` },
                   ].map(({ label, value }) => (
-                    <div key={label} className="rounded-lg p-3 text-center"
+                    <div key={label} className="rounded-lg p-2 sm:p-3 text-center overflow-hidden"
                       style={{ background: "rgba(0,255,136,0.05)", border: "1px solid rgba(0,255,136,0.12)" }}>
-                      <p className="text-lg font-display font-black text-neon-green">{value}</p>
-                      <p className="text-[11px] font-mono text-text-muted">{label}</p>
+                      <p className="text-sm sm:text-lg font-display font-black text-neon-green truncate">{value}</p>
+                      <p className="text-[10px] sm:text-[11px] font-mono text-text-muted truncate">{label}</p>
                     </div>
                   ))}
                 </div>
@@ -188,7 +188,7 @@ export function PdfToExcel() {
                     <span className="text-[11px] font-mono text-neon-green/70 uppercase tracking-widest">Preview (first 10 rows)</span>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-xs font-mono">
+                    <table className="w-full text-xs font-mono table-fixed">
                       <thead>
                         <tr style={{ background: "rgba(0,255,136,0.06)" }}>
                           <th className="px-3 py-2 text-left text-neon-green/80 font-semibold w-12">Page</th>
@@ -199,7 +199,7 @@ export function PdfToExcel() {
                         {rows.slice(0, 10).map((r, i) => (
                           <tr key={i} style={{ borderTop: "1px solid rgba(0,255,136,0.06)" }}>
                             <td className="px-3 py-1.5 text-text-muted">{r.page}</td>
-                            <td className="px-3 py-1.5 text-text-secondary truncate max-w-xs">{r.text}</td>
+                            <td className="px-3 py-1.5 text-text-secondary truncate">{r.text}</td>
                           </tr>
                         ))}
                       </tbody>

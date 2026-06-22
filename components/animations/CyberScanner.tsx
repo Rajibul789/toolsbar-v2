@@ -41,7 +41,7 @@ export function CyberScanner({
 
   return (
     <div className="relative w-full rounded-xl overflow-hidden border border-neon-cyan/20 bg-terminal"
-         style={{ minHeight: 300 }}>
+         style={{ minHeight: 220 }}>
 
       {/* Corner brackets */}
       <div className="corner-bracket tl" />
@@ -61,8 +61,8 @@ export function CyberScanner({
       />
 
       {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-neon-cyan/10">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-neon-cyan/10">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <motion.div
             className="w-2 h-2 rounded-full bg-neon-red"
             animate={{ opacity: [1, 0.3, 1] }}
@@ -79,10 +79,10 @@ export function CyberScanner({
             transition={{ duration: 0.8, repeat: Infinity, delay: 0.4 }}
           />
         </div>
-        <span className="text-xs font-mono text-neon-cyan/60 tracking-widest uppercase">
+        <span className="hidden sm:inline text-xs font-mono text-neon-cyan/60 tracking-widest uppercase truncate">
           SYSTEM PROCESS
         </span>
-        <span className="text-xs font-mono text-text-muted">
+        <span className="text-xs font-mono text-text-muted flex-shrink-0">
           PID:{" "}
           <motion.span
             animate={{ opacity: [1, 0.5, 1] }}
@@ -94,9 +94,9 @@ export function CyberScanner({
       </div>
 
       {/* Main area */}
-      <div className="flex h-full">
-        {/* Left: hex data stream */}
-        <div className="w-1/3 border-r border-neon-cyan/8 p-4 overflow-hidden">
+      <div className="flex flex-col md:flex-row">
+        {/* Left: hex data stream — decorative only, hidden on small screens where it has no room to render legibly */}
+        <div className="hidden md:block md:w-1/3 border-r border-neon-cyan/8 p-4 overflow-hidden">
           <p className="text-xs font-mono text-neon-cyan/40 mb-2 uppercase tracking-widest">
             Data Stream
           </p>
@@ -108,7 +108,7 @@ export function CyberScanner({
                 animate={{ opacity: 1 - i * 0.12, x: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
-                className="text-xs font-mono mb-1"
+                className="text-xs font-mono mb-1 truncate"
                 style={{ color: `rgba(0,255,136,${0.8 - i * 0.1})` }}
               >
                 {line}
@@ -118,9 +118,9 @@ export function CyberScanner({
         </div>
 
         {/* Right: status area */}
-        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
+        <div className="flex-1 min-w-0 flex flex-col items-center justify-center p-5 sm:p-6 gap-5 sm:gap-6">
           {/* Spinning ring */}
-          <div className="relative w-20 h-20">
+          <div className="relative w-16 h-16 sm:w-20 sm:h-20">
             <div className="absolute inset-0 rounded-full ring-spin opacity-30" />
             <div className="absolute inset-2 rounded-full border border-neon-cyan/20" />
             <motion.div
@@ -141,16 +141,16 @@ export function CyberScanner({
           </div>
 
           {/* Status text */}
-          <div className="text-center">
+          <div className="text-center w-full px-2">
             <motion.p
               key={statusText}
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-sm font-mono text-neon-cyan tracking-widest uppercase"
+              className="text-sm font-mono text-neon-cyan tracking-widest uppercase break-words"
             >
               {statusText}
             </motion.p>
-            <p className="text-xs font-mono text-text-muted mt-1">
+            <p className="hidden sm:block text-xs font-mono text-text-muted mt-1">
               {randomHex(4)}.{randomHex(2)} @ {new Date().toLocaleTimeString()}
             </p>
           </div>
@@ -176,14 +176,14 @@ export function CyberScanner({
       {/* Bottom status bar */}
       <div className="px-4 py-2 border-t border-neon-cyan/8 flex items-center gap-2">
         <motion.div
-          className="w-1.5 h-1.5 rounded-full bg-neon-green"
+          className="w-1.5 h-1.5 rounded-full bg-neon-green flex-shrink-0"
           animate={{ opacity: [1, 0, 1] }}
           transition={{ duration: 0.6, repeat: Infinity }}
         />
-        <span className="text-xs font-mono text-text-muted">
+        <span className="flex-1 min-w-0 truncate text-xs font-mono text-text-muted">
           ENCRYPTING · PROCESSING · ANALYZING
         </span>
-        <span className="ml-auto text-xs font-mono text-neon-cyan/40">
+        <span className="hidden sm:inline flex-shrink-0 text-xs font-mono text-neon-cyan/40">
           {randomHex(8)}
         </span>
       </div>

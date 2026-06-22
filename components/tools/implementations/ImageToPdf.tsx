@@ -214,13 +214,13 @@ export function ImageToPdf() {
         {state === "complete" && result && (
           <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <ResultReveal onReset={handleReset} successMessage="PDF CREATED">
-              <div className="flex items-center gap-4 rounded-xl px-5 py-4"
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl px-5 py-4"
                 style={{ background: "rgba(0,245,255,0.04)", border: "1px solid rgba(0,245,255,0.15)" }}>
-                <div>
+                <div className="text-center sm:text-left">
                   <p className="text-xl font-display font-black text-neon-cyan">{formatBytes(result.size)}</p>
                   <p className="text-xs font-mono text-text-muted">{images.length} page PDF</p>
                 </div>
-                <DownloadButton onClick={() => downloadBlob(result, "images.pdf")} label="Download PDF" color="cyan" className="flex-1" />
+                <DownloadButton onClick={() => downloadBlob(result, "images.pdf")} label="Download PDF" color="cyan" className="w-full sm:flex-1" />
               </div>
             </ResultReveal>
           </motion.div>

@@ -66,7 +66,7 @@ export function UrlShortener() {
           Enter Long URL
         </label>
         <div className="flex gap-2">
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-0">
             <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
             <input
               type="url"
@@ -151,7 +151,7 @@ export function UrlShortener() {
                 </div>
 
                 {/* Original URL */}
-                <p className="text-[11px] font-mono text-text-muted truncate pl-5.5">
+                <p className="text-[11px] font-mono text-text-muted truncate pl-5">
                   ↳ {r.original}
                 </p>
               </motion.div>

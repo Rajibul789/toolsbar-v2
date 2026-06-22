@@ -133,58 +133,76 @@ export function PdfToText() {
           </motion.div>
         )}
 
-        {state === "complete" && extractedText && (
+        {state === "complete" && (
           <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <ResultReveal onReset={handleReset} successMessage="EXTRACTION COMPLETE">
-              <div className="space-y-4">
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { label: "Pages",     value: pageCount },
-                    { label: "Words",     value: wordCount.toLocaleString() },
-                    { label: "Characters",value: extractedText.length.toLocaleString() },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="rounded-lg p-3 text-center" style={{ background: "rgba(0,255,136,0.05)", border: "1px solid rgba(0,255,136,0.12)" }}>
-                      <p className="text-lg font-display font-black text-neon-green">{value}</p>
-                      <p className="text-[11px] font-mono text-text-muted">{label}</p>
-                    </div>
-                  ))}
-                </div>
+            <ResultReveal
+              onReset={handleReset}
+              successMessage={extractedText ? "EXTRACTION COMPLETE" : "NO TEXT FOUND"}
+            >
+              {extractedText ? (
+                <div className="space-y-4">
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                    {[
+                      { label: "Pages",     value: pageCount },
+                      { label: "Words",     value: wordCount.toLocaleString() },
+                      { label: "Characters",value: extractedText.length.toLocaleString() },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="rounded-lg p-2 sm:p-3 text-center overflow-hidden" style={{ background: "rgba(0,255,136,0.05)", border: "1px solid rgba(0,255,136,0.12)" }}>
+                        <p className="text-sm sm:text-lg font-display font-black text-neon-green truncate">{value}</p>
+                        <p className="text-[10px] sm:text-[11px] font-mono text-text-muted truncate">{label}</p>
+                      </div>
+                    ))}
+                  </div>
 
-                {/* Text preview */}
-                <div className="relative">
-                  <textarea
-                    value={extractedText}
-                    readOnly
-                    rows={12}
-                    className="w-full rounded-xl p-4 text-xs font-mono text-text-secondary resize-none outline-none"
-                    style={{
-                      background: "rgba(0,0,0,0.4)",
-                      border: "1px solid rgba(0,255,136,0.12)",
-                      lineHeight: 1.7,
-                    }}
-                  />
-                </div>
+                  {/* Text preview */}
+                  <div className="relative">
+                    <textarea
+                      value={extractedText}
+                      readOnly
+                      rows={12}
+                      className="w-full rounded-xl p-4 text-xs font-mono text-text-secondary resize-none outline-none"
+                      style={{
+                        background: "rgba(0,0,0,0.4)",
+                        border: "1px solid rgba(0,255,136,0.12)",
+                        lineHeight: 1.7,
+                      }}
+                    />
+                  </div>
 
-                {/* Buttons */}
-                <div className="flex gap-3">
-                  <button
-                    onClick={copyToClipboard}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-neon-cyan/20 text-sm font-mono text-text-muted hover:text-neon-cyan hover:border-neon-cyan/40 transition-all"
-                  >
-                    <Copy className="w-4 h-4" />
-                    Copy Text
-                  </button>
-                  <button
-                    onClick={downloadText}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border text-sm font-mono transition-all"
-                    style={{ borderColor: "rgba(0,255,136,0.3)", color: "#00ff88", background: "rgba(0,255,136,0.06)" }}
-                  >
-                    <Download className="w-4 h-4" />
-                    Download .txt
-                  </button>
+                  {/* Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={copyToClipboard}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-neon-cyan/20 text-sm font-mono text-text-muted hover:text-neon-cyan hover:border-neon-cyan/40 transition-all"
+                    >
+                      <Copy className="w-4 h-4" />
+                      Copy Text
+                    </button>
+                    <button
+                      onClick={downloadText}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border text-sm font-mono transition-all"
+                      style={{ borderColor: "rgba(0,255,136,0.3)", color: "#00ff88", background: "rgba(0,255,136,0.06)" }}
+                    >
+                      <Download className="w-4 h-4" />
+                      Download .txt
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div
+                  className="rounded-xl p-6 text-center"
+                  style={{ background: "rgba(255,204,0,0.05)", border: "1px solid rgba(255,204,0,0.2)" }}
+                >
+                  <p className="text-sm font-mono font-semibold text-neon-yellow mb-2">
+                    No selectable text was found in this PDF{pageCount ? ` (${pageCount} page${pageCount === 1 ? "" : "s"} scanned)` : ""}.
+                  </p>
+                  <p className="text-xs font-mono text-text-muted leading-relaxed">
+                    This usually means the PDF is a scanned image with no text layer. Try the{" "}
+                    <span className="text-neon-green">Image to Word</span> tool instead — it uses OCR to read text from scanned pages.
+                  </p>
+                </div>
+              )}
             </ResultReveal>
           </motion.div>
         )}

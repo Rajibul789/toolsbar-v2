@@ -167,7 +167,7 @@ export function CodePackBuilder() {
     <div className="space-y-4">
       {/* Project name */}
       <div className="flex items-center gap-3">
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-1.5">Project Name</label>
           <input type="text" value={projectName} onChange={(e) => setProjectName(e.target.value.replace(/\s+/g, "-"))}
             className="input-cyber w-full text-sm" placeholder="my-project" />
@@ -178,9 +178,9 @@ export function CodePackBuilder() {
       </div>
 
       {/* IDE layout */}
-      <div className="grid grid-cols-5 gap-0 rounded-xl overflow-hidden" style={{ border: "1px solid rgba(0,245,255,0.1)", minHeight: 400 }}>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-0 rounded-xl overflow-hidden" style={{ border: "1px solid rgba(0,245,255,0.1)", minHeight: 400 }}>
         {/* File tree */}
-        <div className="col-span-2 border-r border-neon-cyan/8" style={{ background: "rgba(0,0,0,0.4)" }}>
+        <div className="lg:col-span-2 border-b lg:border-b-0 lg:border-r border-neon-cyan/8" style={{ background: "rgba(0,0,0,0.4)" }}>
           {/* Tree header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-neon-cyan/8">
             <span className="text-[10px] font-mono uppercase tracking-widest text-neon-cyan/60">Explorer</span>
@@ -196,9 +196,9 @@ export function CodePackBuilder() {
 
           {/* Project root row */}
           <div className="px-2 py-1.5 border-b border-neon-cyan/5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono text-neon-cyan/50 uppercase tracking-widest px-2">{projectName}/</span>
-              <div className="flex gap-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-mono text-neon-cyan/50 uppercase tracking-widest px-2 truncate">{projectName}/</span>
+              <div className="flex gap-1 flex-shrink-0">
                 <button onClick={() => addFile(null)} className="p-1 text-[10px] font-mono text-text-muted hover:text-neon-cyan" title="Add file to root">+f</button>
                 <button onClick={() => addFolder(null)} className="p-1 text-[10px] font-mono text-text-muted hover:text-neon-yellow" title="Add folder to root">+d</button>
               </div>
@@ -212,7 +212,7 @@ export function CodePackBuilder() {
         </div>
 
         {/* Editor pane */}
-        <div className="col-span-3 flex flex-col" style={{ background: "rgba(10,15,30,0.8)" }}>
+        <div className="lg:col-span-3 flex flex-col" style={{ background: "rgba(10,15,30,0.8)" }}>
           {selectedFile ? (
             <>
               {/* Editor tab */}

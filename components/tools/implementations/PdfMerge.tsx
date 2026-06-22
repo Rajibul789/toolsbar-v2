@@ -121,7 +121,7 @@ export function PdfMerge() {
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-2"
                 >
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-1">
                     <p className="text-xs font-mono text-text-muted">
                       {files.length} file{files.length !== 1 ? "s" : ""} — drag to reorder
                     </p>
@@ -230,7 +230,7 @@ export function PdfMerge() {
                   onClick={() => downloadBlob(result, "merged.pdf")}
                   label="Download Merged PDF"
                   color="purple"
-                  className="flex-1 sm:max-w-xs"
+                  className="w-full sm:w-auto sm:max-w-xs"
                 />
               </div>
             </ResultReveal>

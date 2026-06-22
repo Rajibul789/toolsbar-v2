@@ -203,7 +203,7 @@ export function ImageCompressor() {
             <ResultReveal onReset={handleReset} successMessage="COMPRESSION COMPLETE">
               <div className="space-y-4">
                 {/* Summary */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   {[
                     {
                       label: "Original",
@@ -223,11 +223,11 @@ export function ImageCompressor() {
                   ].map(({ label, value, color }) => (
                     <div
                       key={label}
-                      className="rounded-lg p-3 text-center"
+                      className="rounded-lg p-2 sm:p-3 text-center overflow-hidden"
                       style={{ background: "rgba(191,0,255,0.05)", border: "1px solid rgba(191,0,255,0.12)" }}
                     >
-                      <p className={`text-lg font-display font-black ${color}`}>{value}</p>
-                      <p className="text-[11px] font-mono text-text-muted">{label}</p>
+                      <p className={`text-sm sm:text-lg font-display font-black truncate ${color}`}>{value}</p>
+                      <p className="text-[10px] sm:text-[11px] font-mono text-text-muted truncate">{label}</p>
                     </div>
                   ))}
                 </div>
@@ -241,12 +241,12 @@ export function ImageCompressor() {
                       style={{ background: "rgba(191,0,255,0.04)", border: "1px solid rgba(191,0,255,0.1)" }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={r.dataUrl} alt="" className="w-8 h-8 object-cover rounded" />
+                      <img src={r.dataUrl} alt="" className="w-8 h-8 object-cover rounded flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-mono text-text-primary truncate">{r.file.name}</p>
-                        <div className="flex items-center gap-2 text-[11px] font-mono text-text-muted">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-mono text-text-muted">
                           <span>{formatBytes(r.originalSize)}</span>
-                          <ArrowDown className="w-2.5 h-2.5 text-neon-green" />
+                          <ArrowDown className="w-2.5 h-2.5 text-neon-green flex-shrink-0" />
                           <span className="text-neon-green">{formatBytes(r.compressedSize)}</span>
                           <span className="text-neon-purple">-{r.savings}%</span>
                         </div>
@@ -258,7 +258,7 @@ export function ImageCompressor() {
                         }}
                         label="Save"
                         color="purple"
-                        className="text-xs px-3 py-1.5"
+                        className="text-xs px-3 py-1.5 flex-shrink-0"
                       />
                     </div>
                   ))}

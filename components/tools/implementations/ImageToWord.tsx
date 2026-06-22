@@ -145,49 +145,66 @@ export function ImageToWord() {
           </motion.div>
         )}
 
-        {state === "complete" && ocrText && (
+        {state === "complete" && (
           <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <ResultReveal onReset={handleReset} successMessage="OCR COMPLETE">
-              <div className="space-y-4">
-                {/* Stats */}
-                <div className="flex items-center gap-4 text-xs font-mono text-text-muted">
-                  <span><span className="text-neon-green font-bold">{wordCount}</span> words extracted</span>
-                  <span><span className="text-neon-green font-bold">{ocrText.length}</span> characters</span>
-                </div>
+            <ResultReveal
+              onReset={handleReset}
+              successMessage={ocrText ? "OCR COMPLETE" : "NO TEXT DETECTED"}
+            >
+              {ocrText ? (
+                <div className="space-y-4">
+                  {/* Stats */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono text-text-muted">
+                    <span><span className="text-neon-green font-bold">{wordCount}</span> words extracted</span>
+                    <span><span className="text-neon-green font-bold">{ocrText.length}</span> characters</span>
+                  </div>
 
-                {/* Text preview + edit */}
-                <textarea
-                  value={ocrText}
-                  onChange={(e) => setOcrText(e.target.value)}
-                  rows={10}
-                  className="w-full rounded-xl p-4 text-sm font-mono text-text-secondary resize-none outline-none"
-                  style={{
-                    background: "rgba(0,0,0,0.4)",
-                    border: "1px solid rgba(0,255,136,0.15)",
-                    lineHeight: 1.7,
-                  }}
-                />
-                <p className="text-[11px] font-mono text-text-muted">You can edit the extracted text before downloading.</p>
+                  {/* Text preview + edit */}
+                  <textarea
+                    value={ocrText}
+                    onChange={(e) => setOcrText(e.target.value)}
+                    rows={10}
+                    className="w-full rounded-xl p-4 text-sm font-mono text-text-secondary resize-none outline-none"
+                    style={{
+                      background: "rgba(0,0,0,0.4)",
+                      border: "1px solid rgba(0,255,136,0.15)",
+                      lineHeight: 1.7,
+                    }}
+                  />
+                  <p className="text-[11px] font-mono text-text-muted">You can edit the extracted text before downloading.</p>
 
-                {/* Download buttons */}
-                <div className="grid grid-cols-3 gap-2">
-                  <button onClick={copyText}
-                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg border text-xs font-mono transition-all"
-                    style={{ borderColor: "rgba(0,245,255,0.2)", color: "#94a3b8" }}>
-                    <Copy className="w-3.5 h-3.5" />Copy
-                  </button>
-                  <button onClick={downloadTxt}
-                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg border text-xs font-mono transition-all"
-                    style={{ borderColor: "rgba(0,245,255,0.2)", color: "#94a3b8" }}>
-                    <Download className="w-3.5 h-3.5" />.txt
-                  </button>
-                  <button onClick={downloadDocx}
-                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg border text-xs font-mono font-semibold transition-all"
-                    style={{ background: "rgba(0,255,136,0.08)", borderColor: "rgba(0,255,136,0.35)", color: "#00ff88" }}>
-                    <Download className="w-3.5 h-3.5" />.docx
-                  </button>
+                  {/* Download buttons */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <button onClick={copyText}
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg border text-xs font-mono transition-all"
+                      style={{ borderColor: "rgba(0,245,255,0.2)", color: "#94a3b8" }}>
+                      <Copy className="w-3.5 h-3.5" />Copy
+                    </button>
+                    <button onClick={downloadTxt}
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg border text-xs font-mono transition-all"
+                      style={{ borderColor: "rgba(0,245,255,0.2)", color: "#94a3b8" }}>
+                      <Download className="w-3.5 h-3.5" />.txt
+                    </button>
+                    <button onClick={downloadDocx}
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg border text-xs font-mono font-semibold transition-all"
+                      style={{ background: "rgba(0,255,136,0.08)", borderColor: "rgba(0,255,136,0.35)", color: "#00ff88" }}>
+                      <Download className="w-3.5 h-3.5" />.docx
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div
+                  className="rounded-xl p-6 text-center"
+                  style={{ background: "rgba(255,204,0,0.05)", border: "1px solid rgba(255,204,0,0.2)" }}
+                >
+                  <p className="text-sm font-mono font-semibold text-neon-yellow mb-2">
+                    No text was detected in this image.
+                  </p>
+                  <p className="text-xs font-mono text-text-muted leading-relaxed">
+                    Try a higher-resolution image with clearer contrast between the text and background, and make sure the text is horizontal.
+                  </p>
+                </div>
+              )}
             </ResultReveal>
           </motion.div>
         )}

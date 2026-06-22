@@ -123,14 +123,14 @@ export function TxtToPdf() {
             {/* File info */}
             <div className="flex items-center gap-3 rounded-lg px-4 py-3"
               style={{ background: "rgba(255,204,0,0.05)", border: "1px solid rgba(255,204,0,0.15)" }}>
-              <Eye className="w-4 h-4 text-neon-yellow" />
-              <div className="flex-1">
-                <p className="text-xs font-mono text-text-primary">{file?.name}</p>
+              <Eye className="w-4 h-4 text-neon-yellow flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-mono text-text-primary truncate">{file?.name}</p>
                 <p className="text-[11px] font-mono text-text-muted">
                   {lineCount.toLocaleString()} lines · {wordCount.toLocaleString()} words
                 </p>
               </div>
-              <button onClick={handleReset} className="text-xs font-mono text-text-muted hover:text-neon-red transition-colors">
+              <button onClick={handleReset} className="text-xs font-mono text-text-muted hover:text-neon-red transition-colors flex-shrink-0 whitespace-nowrap">
                 Remove
               </button>
             </div>
@@ -152,7 +152,7 @@ export function TxtToPdf() {
             </div>
 
             {/* Settings */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div>
                 <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-2">Page Size</label>
                 <div className="flex gap-1.5">
@@ -218,9 +218,9 @@ export function TxtToPdf() {
         {state === "complete" && result && (
           <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <ResultReveal onReset={handleReset} successMessage="CONVERSION COMPLETE">
-              <div className="rounded-xl px-5 py-4 flex items-center gap-4"
+              <div className="rounded-xl px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4"
                 style={{ background: "rgba(255,204,0,0.05)", border: "1px solid rgba(255,204,0,0.15)" }}>
-                <div>
+                <div className="text-center sm:text-left">
                   <p className="text-xl font-display font-black" style={{ color: "#ffcc00" }}>
                     {(result.size / 1024).toFixed(1)} KB
                   </p>
@@ -230,7 +230,7 @@ export function TxtToPdf() {
                   onClick={() => downloadBlob(result, (file?.name ?? "file").replace(".txt", ".pdf"))}
                   label="Download PDF"
                   color="cyan"
-                  className="flex-1"
+                  className="w-full sm:flex-1"
                 />
               </div>
             </ResultReveal>

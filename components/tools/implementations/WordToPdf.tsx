@@ -209,19 +209,19 @@ export function WordToPdf() {
                 {/* HTML preview */}
                 {previewHtml && (
                   <div
-                    className="rounded-xl p-5 max-h-64 overflow-y-auto"
+                    className="rounded-xl p-5 max-h-64 overflow-auto"
                     style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,102,255,0.15)" }}
                   >
                     <p className="text-[10px] font-mono text-text-muted mb-3 uppercase tracking-widest">Document Preview</p>
                     <div
-                      className="text-sm text-text-secondary leading-relaxed"
+                      className="text-sm text-text-secondary leading-relaxed [&_table]:max-w-full [&_img]:max-w-full [&_img]:h-auto"
                       dangerouslySetInnerHTML={{ __html: previewHtml }}
                       style={{ fontFamily: "Georgia, serif" }}
                     />
                   </div>
                 )}
 
-                <div className="flex items-center justify-between rounded-xl px-5 py-4" style={{ background: "rgba(0,102,255,0.05)", border: "1px solid rgba(0,102,255,0.15)" }}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl px-5 py-4" style={{ background: "rgba(0,102,255,0.05)", border: "1px solid rgba(0,102,255,0.15)" }}>
                   <div>
                     <p className="font-display text-lg font-black" style={{ color: "#0066ff" }}>{formatBytes(result.size)}</p>
                     <p className="text-xs font-mono text-text-muted">PDF file ready</p>
@@ -230,6 +230,7 @@ export function WordToPdf() {
                     onClick={() => downloadBlob(result, (file?.name ?? "document").replace(/\.docx?$/, "") + ".pdf")}
                     label="Download PDF"
                     color="cyan"
+                    className="w-full sm:w-auto"
                   />
                 </div>
               </div>
