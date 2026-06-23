@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import type { ToolConfig, NeonColor } from "@/config/tools.config";
@@ -26,6 +26,9 @@ export function ToolCard({ tool, index = 0, className }: ToolCardProps) {
   const color = NEON_COLOR_MAP[neonColor];
   const bgColor = NEON_BG_CLASS[neonColor];
   const borderColor = NEON_BORDER_CLASS[neonColor];
+  // Disable hover animations when the user has requested reduced motion
+  // OR on touch-only devices (avoids first-tap card-lift before navigation).
+  const shouldReduceMotion = useReducedMotion();
 
   return (
     <motion.div
@@ -37,7 +40,7 @@ export function ToolCard({ tool, index = 0, className }: ToolCardProps) {
       <Link href={`/tools/${tool.slug}`} className="block group">
         <motion.div
           className={cn("tool-card p-5 h-full flex flex-col gap-4", className)}
-          whileHover={{ y: -4 }}
+          whileHover={shouldReduceMotion ? undefined : { y: -4 }}
           transition={{ type: "spring", stiffness: 400, damping: 25 }}
         >
           {/* Icon + badges row */}
@@ -48,7 +51,7 @@ export function ToolCard({ tool, index = 0, className }: ToolCardProps) {
                 background: bgColor,
                 border: `1px solid ${borderColor}`,
               }}
-              whileHover={{ scale: 1.1, rotate: 5 }}
+              whileHover={shouldReduceMotion ? undefined : { scale: 1.1, rotate: 5 }}
               transition={{ type: "spring", stiffness: 400 }}
             >
               <Icon
@@ -89,7 +92,7 @@ export function ToolCard({ tool, index = 0, className }: ToolCardProps) {
             <motion.div
               className="flex items-center gap-1 text-xs font-mono transition-all duration-200"
               style={{ color: `${color}60` }}
-              whileHover={{ x: 2 }}
+              whileHover={shouldReduceMotion ? undefined : { x: 2 }}
             >
               <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[11px]">
                 LAUNCH

@@ -331,17 +331,25 @@
     background: rgba(0,245,255,0.1);
   }
   .progress-cyber-fill {
-    @apply h-full rounded-full transition-all duration-300 relative;
+    @apply h-full rounded-full transition-all duration-300 relative overflow-hidden;
     background: linear-gradient(90deg, var(--neon-cyan), var(--neon-green));
     box-shadow: 0 0 10px rgba(0,245,255,0.5);
+    will-change: width;
   }
   .progress-cyber-fill::after {
     content: "";
     position: absolute;
-    top: 0; right: 0; bottom: 0;
-    width: 20px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4));
-    animation: shimmer 1.5s ease-in-out infinite;
+    top: 0; left: 0; bottom: 0;
+    width: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255,255,255,0.0) 25%,
+      rgba(255,255,255,0.35) 50%,
+      rgba(255,255,255,0.0) 75%,
+      transparent 100%
+    );
+    animation: shimmer-sweep 1.8s ease-in-out infinite;
   }
 
   /* ---- INPUT (cyber) ---- */
@@ -666,4 +674,51 @@
     var(--neon-cyan) 360deg
   );
   animation: spin-gradient 1.5s linear infinite;
+  will-change: transform;
+}
+
+/* ────────────────────────────────────────────────
+   SHIMMER KEYFRAME (used by .progress-cyber-fill::after)
+   Must live here — not just in tailwind.config.ts —
+   because globals.css references it via animation: property
+   directly, and Tailwind only emits @keyframes when an
+   animate-{name} utility class is actually referenced.
+   ──────────────────────────────────────────────── */
+@keyframes shimmer-sweep {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(120%);  }
+}
+
+/* ────────────────────────────────────────────────
+   PREFERS-REDUCED-MOTION
+   Disables or greatly reduces all CSS animations and
+   transitions when the OS accessibility setting requests it.
+   Framer Motion's LazyMotion/MotionConfig handles its own
+   reduced-motion via useReducedMotion() in the components.
+   ──────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Keep progress bar visible but unanimated */
+  .progress-cyber-fill::after {
+    display: none;
+  }
+
+  /* Disable glitch pseudo-elements */
+  .glitch::before,
+  .glitch::after {
+    display: none;
+  }
+
+  /* Freeze ring-spin */
+  .ring-spin {
+    animation: none;
+  }
 }

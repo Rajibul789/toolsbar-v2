@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight, Calendar, Clock } from "lucide-react";
+import { motion } from "framer-motion";
 
 const PREVIEW_POSTS = [
   {
@@ -38,7 +41,13 @@ export function BlogPreviewSection() {
   return (
     <section className="py-20 max-w-7xl mx-auto px-4 sm:px-6">
       {/* Header */}
-      <div className="flex items-end justify-between mb-10">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.4 }}
+        className="flex items-end justify-between mb-10"
+      >
         <div>
           <div className="section-label mb-3">Blog</div>
           <h2 className="font-display text-3xl font-black text-white">
@@ -52,13 +61,17 @@ export function BlogPreviewSection() {
           All articles
           <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
         </Link>
-      </div>
+      </motion.div>
 
       {/* Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {PREVIEW_POSTS.map((post) => (
-          <article
+        {PREVIEW_POSTS.map((post, i) => (
+          <motion.article
             key={post.slug}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-30px" }}
+            transition={{ duration: 0.4, delay: i * 0.08 }}
             className="glass-panel overflow-hidden group hover:shadow-glass-hover transition-all duration-300 hover:-translate-y-1"
           >
             {/* Color bar */}
@@ -111,7 +124,7 @@ export function BlogPreviewSection() {
                 </Link>
               </div>
             </div>
-          </article>
+          </motion.article>
         ))}
       </div>
 

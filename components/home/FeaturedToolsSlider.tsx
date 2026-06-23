@@ -73,15 +73,15 @@ export function FeaturedToolsSlider() {
 
   const variants = {
     enter: (dir: "left" | "right") => ({
-      x: dir === "right" ? 80 : -80,
+      x: dir === "right" ? 60 : -60,
       opacity: 0,
-      filter: "blur(4px)",
+      scale: 0.97,
     }),
-    center: { x: 0, opacity: 1, filter: "blur(0px)" },
+    center: { x: 0, opacity: 1, scale: 1 },
     exit: (dir: "left" | "right") => ({
-      x: dir === "right" ? -80 : 80,
+      x: dir === "right" ? -60 : 60,
       opacity: 0,
-      filter: "blur(4px)",
+      scale: 0.97,
     }),
   };
 

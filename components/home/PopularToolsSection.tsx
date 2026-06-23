@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { TrendingUp, ArrowRight, Zap } from "lucide-react";
 import * as LucideIcons from "lucide-react";
@@ -23,6 +23,7 @@ const USAGE_LABELS: Record<string, string> = {
 };
 
 export function PopularToolsSection() {
+  const shouldReduceMotion = useReducedMotion();
   if (POPULAR_TOOLS.length === 0) return null;
 
   return (
@@ -79,7 +80,7 @@ export function PopularToolsSection() {
                     border: `1px solid ${color}25`,
                     boxShadow: `0 0 0 1px ${color}08`,
                   }}
-                  whileHover={{ y: -4, boxShadow: `0 0 30px ${color}20, 0 0 0 1px ${color}40` }}
+                  whileHover={shouldReduceMotion ? undefined : { y: -4, boxShadow: `0 0 30px ${color}20, 0 0 0 1px ${color}40` }}
                   transition={{ type: "spring", stiffness: 400, damping: 25 }}
                 >
                   {/* Background glow */}

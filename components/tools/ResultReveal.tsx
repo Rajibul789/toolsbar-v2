@@ -73,9 +73,9 @@ export function ResultReveal({
 
       {/* Content with decode animation */}
       <motion.div
-        initial={phase === "decode" ? { filter: "blur(6px)", opacity: 0.3 } : {}}
-        animate={{ filter: "blur(0px)", opacity: 1 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
+        initial={phase === "decode" ? { scale: 0.98, opacity: 0.2 } : {}}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
         className="relative"
       >
         {/* Scan sweep overlay (disappears after reveal) */}
