@@ -16,11 +16,11 @@
  *   - lib/errors/error-boundary.tsx  (React render errors)
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import {
   AlertTriangle, ChevronDown, ChevronRight, Copy, Check,
   RefreshCw, Home, Terminal, Layers, Globe, Monitor,
-  Clock, FileCode, User, Hash, Cpu, Shield, Flag,
+  FileCode, User, Cpu, Shield, Flag,
 } from "lucide-react";
 import { useErrorReveal } from "./error-context";
 import { reportError } from "./reporter";

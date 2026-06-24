@@ -210,7 +210,7 @@ export async function GET(req: NextRequest) {
       pages:    Math.ceil(total / limit),
       reports,
       stats: {
-        byStatus: Object.fromEntries(byStatus.map((s) => [s.status, s._count.id])),
+        byStatus:  Object.fromEntries(byStatus.map((s) => [s.status, s._count.id])),
         topRoutes: topRoutes.map((r) => ({ route: r.route, count: r._count.id })),
         topTools:  topTools.map((t)  => ({ toolSlug: t.toolSlug, count: t._count.id })),
         topTypes:  topTypes.map((t)  => ({ errorType: t.errorType, count: t._count.id })),
