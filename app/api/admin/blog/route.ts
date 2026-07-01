@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { revalidatePath, revalidateTag } from "next/cache";
 import prisma from "@/lib/db";
 import { getAdminFromToken } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { logApiError } from "@/lib/errors/logger";
+import { CACHE_TAGS } from "@/lib/data/tools";
 
 const createSchema = z.object({
   title:           z.string().min(5),
@@ -19,31 +21,35 @@ const createSchema = z.object({
   faqSchema:       z.unknown().optional(),
 });
 
-// GET: list published posts
+// GET: list ALL posts for admin (no status filter — drafts/scheduled/archived all visible)
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const page  = Number(searchParams.get("page")  ?? 1);
-    const limit = Number(searchParams.get("limit") ?? 12);
-    const cat   = searchParams.get("category");
-    const tag   = searchParams.get("tag");
+    const cookieStore = await cookies();
+    const token = cookieStore.get("admin_token")?.value;
+    const admin = await getAdminFromToken(token ?? "");
+    if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const where: Record<string, unknown> = { status: "PUBLISHED" };
-    if (cat) where.category = { slug: cat };
-    if (tag) where.tags = { some: { tag: { slug: tag } } };
+    const { searchParams } = new URL(req.url);
+    const page   = Number(searchParams.get("page")  ?? 1);
+    const limit  = Number(searchParams.get("limit") ?? 50);
+    const status = searchParams.get("status"); // optional filter by specific status
+
+    // Admin sees all statuses; optionally filter to one status via ?status=DRAFT etc.
+    const where: Record<string, unknown> = {};
+    if (status && ["DRAFT", "PUBLISHED", "SCHEDULED", "ARCHIVED"].includes(status)) {
+      where.status = status;
+    }
 
     const [posts, total] = await Promise.all([
       prisma.blogPost.findMany({
         where,
-        orderBy: { publishedAt: "desc" },
+        orderBy: { updatedAt: "desc" },
         skip: (page - 1) * limit,
         take: limit,
         select: {
-          id: true, title: true, slug: true, excerpt: true,
-          featuredImage: true, publishedAt: true,
-          author:   { select: { name: true } },
+          id: true, title: true, slug: true, excerpt: true, status: true,
+          featuredImage: true, publishedAt: true, views: true,
           category: { select: { name: true, slug: true } },
-          tags:     { select: { tag: { select: { name: true, slug: true } } } },
         },
       }),
       prisma.blogPost.count({ where }),
@@ -94,6 +100,14 @@ export async function POST(req: NextRequest) {
         faqSchema:   faqSchema ?? undefined,
       },
     });
+
+    // Invalidate public blog cache so the new post appears immediately
+    revalidateTag(CACHE_TAGS.blogPosts);
+    revalidatePath("/blog");
+    revalidatePath("/");                           // homepage blog preview section
+    if (data.status === "PUBLISHED") {
+      revalidatePath(`/blog/${post.slug}`);
+    }
 
     return NextResponse.json(post, { status: 201 });
   } catch (err) {

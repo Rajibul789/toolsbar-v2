@@ -5,9 +5,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Zap } from "lucide-react";
 import * as LucideIcons from "lucide-react";
-import { TOOLS_CONFIG, NEON_COLOR_MAP, NEON_BG_CLASS } from "@/config/tools.config";
+import { TOOLS_CONFIG, NEON_COLOR_MAP, NEON_BG_CLASS, type ToolConfig } from "@/config/tools.config";
 
-const FEATURED_TOOLS = TOOLS_CONFIG.filter((t) => t.isFeatured);
+// Static fallback — only used when no serverTools prop is provided
+const STATIC_FEATURED = TOOLS_CONFIG.filter((t) => t.isFeatured);
 
 const SLIDE_CONFIGS: Record<
   string,
@@ -32,11 +33,25 @@ function getLucideIcon(name: string) {
   return icons[name] ?? icons["Wrench"];
 }
 
-export function FeaturedToolsSlider() {
+interface FeaturedToolsSliderProps {
+  /** DB-sourced featured tools passed from the parent server component.
+   *  When provided, this overrides the static config so admin changes
+   *  appear on the homepage without a redeployment. */
+  serverTools?: ToolConfig[];
+}
+
+export function FeaturedToolsSlider({ serverTools }: FeaturedToolsSliderProps) {
   const [current, setCurrent] = useState(0);
   const [direction, setDirection] = useState<"left" | "right">("right");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const tools = FEATURED_TOOLS.length > 0 ? FEATURED_TOOLS : TOOLS_CONFIG.slice(0, 3);
+
+  // Prefer DB-sourced tools; fall back to static config
+  const tools: ToolConfig[] =
+    (serverTools && serverTools.length > 0)
+      ? serverTools
+      : STATIC_FEATURED.length > 0
+        ? STATIC_FEATURED
+        : TOOLS_CONFIG.slice(0, 3);
 
   const go = useCallback(
     (idx: number, dir: "left" | "right") => {

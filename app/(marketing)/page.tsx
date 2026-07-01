@@ -8,6 +8,7 @@ import { FAQSection }          from "@/components/home/FAQSection";
 import { BlogPreviewSection }  from "@/components/home/BlogPreviewSection";
 import { RecentlyUsedSection } from "@/components/home/RecentlyUsedSection";
 import { JsonLd }              from "@/components/seo/JsonLd";
+import { getFeaturedTools }    from "@/lib/data/tools";
 
 export const metadata: Metadata = {
   title: "ToolsBar – Free Online PDF, Image & Developer Tools",
@@ -38,7 +39,12 @@ const orgSchema = {
   contactPoint: { "@type": "ContactPoint", contactType: "customer support", email: "hello@toolsbar.com" },
 };
 
-export default function HomePage() {
+// Server component — fetches DB-backed featured tools so admin changes reflect
+// without redeployment. revalidateTag("featured-tools") is called by the admin
+// tools API route on every mutation.
+export default async function HomePage() {
+  const featuredTools = await getFeaturedTools();
+
   return (
     <>
       <JsonLd data={websiteSchema} />
@@ -50,8 +56,8 @@ export default function HomePage() {
       {/* 2. Recently used tools — client-only, from Zustand/localStorage */}
       <RecentlyUsedSection />
 
-      {/* 3. Netflix-style featured tools carousel */}
-      <FeaturedToolsSlider />
+      {/* 3. Netflix-style featured tools carousel — DB-backed */}
+      <FeaturedToolsSlider serverTools={featuredTools} />
 
       {/* 4. Popular Tools — highlighted with usage badges */}
       <PopularToolsSection />

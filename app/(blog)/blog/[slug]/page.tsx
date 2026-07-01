@@ -7,8 +7,10 @@ import remarkGfm from "remark-gfm";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { TOOLS_CONFIG } from "@/config/tools.config";
 import { ToolCard } from "@/components/tools/ToolCard";
+import { getPostBySlug } from "@/lib/data/blog";
 
-// ── Static post data — replace with prisma.blogPost.findUnique() in production ──
+// ── Static post data — used as fallback when the DB has no entry for the slug ──
+// In production add real posts via the admin blog editor; they'll take precedence.
 const BLOG_POSTS = [
   {
     slug: "how-to-split-pdf-online-free",
@@ -176,6 +178,23 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+
+  // Try DB post first
+  const dbPost = await getPostBySlug(slug);
+  if (dbPost) {
+    return {
+      title: `${dbPost.title} | ToolsBar Blog`,
+      description: dbPost.excerpt,
+      alternates: { canonical: `/blog/${slug}` },
+      openGraph: {
+        title: dbPost.title, description: dbPost.excerpt, type: "article",
+        publishedTime: dbPost.publishedAt?.toISOString(),
+        authors: [dbPost.author?.name ?? "ToolsBar Team"],
+      },
+    };
+  }
+
+  // Fall back to static post
   const post = BLOG_POSTS.find((p) => p.slug === slug);
   if (!post) return {};
   return {
@@ -192,6 +211,95 @@ export default async function BlogPostPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+
+  // ── Try DB post first ────────────────────────────────────────────────────────
+  const dbPost = await getPostBySlug(slug);
+  if (dbPost) {
+    const relatedTool = TOOLS_CONFIG.find((t) => t.category === (dbPost.category?.slug?.replace("-tools", "") ?? ""));
+    const articleSchema = {
+      "@context": "https://schema.org", "@type": "Article",
+      headline: dbPost.title, description: dbPost.excerpt,
+      datePublished: dbPost.publishedAt?.toISOString(),
+      author: { "@type": "Organization", name: dbPost.author?.name ?? "ToolsBar Team" },
+      publisher: { "@type": "Organization", name: "ToolsBar", url: "https://toolsbar.com" },
+      url: `https://toolsbar.com/blog/${slug}`,
+    };
+    return (
+      <>
+        <JsonLd data={articleSchema} />
+        <div className="min-h-screen pt-20">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
+            <Link href="/blog" className="inline-flex items-center gap-2 text-xs font-mono text-text-muted hover:text-neon-cyan transition-colors mb-8">
+              <ArrowLeft className="w-3.5 h-3.5" />Back to Blog
+            </Link>
+            <article>
+              <header className="mb-10">
+                {dbPost.category && (
+                  <Link href={`/blog/category/${dbPost.category.slug}`}
+                    className="text-xs font-mono text-neon-cyan hover:underline mb-3 inline-block">
+                    {dbPost.category.name}
+                  </Link>
+                )}
+                <h1 className="font-display text-2xl md:text-3xl lg:text-4xl font-black text-white leading-tight mb-5">
+                  {dbPost.title}
+                </h1>
+                <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-text-muted pb-6 border-b border-neon-cyan/8">
+                  {dbPost.publishedAt && (
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5" />
+                      {dbPost.publishedAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />
+                    {Math.max(1, Math.ceil(dbPost.content.split(/\s+/).length / 200))} min read
+                  </span>
+                  {dbPost.author && <span>By {dbPost.author.name}</span>}
+                </div>
+              </header>
+              <div className="prose-cyber">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}
+                  components={{
+                    h2: ({ children }) => <h2 className="font-display text-xl font-bold text-neon-cyan mt-8 mb-3 pb-2" style={{ borderBottom: "1px solid rgba(0,245,255,0.15)" }}>{children}</h2>,
+                    h3: ({ children }) => <h3 className="font-display text-base font-bold text-text-primary mt-6 mb-2">{children}</h3>,
+                    p:  ({ children }) => <p className="text-text-secondary text-sm leading-relaxed mb-4 font-mono">{children}</p>,
+                    a:  ({ href, children }) => <a href={href} className="text-neon-cyan border-b border-neon-cyan/30 hover:border-neon-cyan">{children}</a>,
+                    code: ({ children, className }) => {
+                      const isBlock = className?.includes("language-");
+                      return isBlock
+                        ? <code className="block code-block my-4 text-xs">{children}</code>
+                        : <code className="text-neon-green bg-neon-green/8 border border-neon-green/15 px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>;
+                    },
+                    pre: ({ children }) => <pre className="code-block my-4 text-xs overflow-x-auto">{children}</pre>,
+                    ul:  ({ children }) => <ul className="space-y-1.5 my-4 pl-0">{children}</ul>,
+                    li:  ({ children }) => <li className="flex gap-2 text-sm text-text-muted font-mono"><span className="text-neon-cyan mt-1 flex-shrink-0">▸</span><span>{children}</span></li>,
+                  }}>{dbPost.content}</ReactMarkdown>
+              </div>
+              {dbPost.tags.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 mt-10 pt-6 border-t border-neon-cyan/8">
+                  <Tag className="w-3.5 h-3.5 text-text-muted" />
+                  {dbPost.tags.map((t: { tag: { name: string; slug: string } }) => (
+                    <Link key={t.tag.slug} href={`/blog/tag/${t.tag.slug}`}
+                      className="text-xs font-mono px-3 py-1 rounded border transition-colors"
+                      style={{ background: "rgba(0,245,255,0.05)", border: "1px solid rgba(0,245,255,0.12)", color: "#475569" }}>
+                      #{t.tag.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </article>
+            {relatedTool && (
+              <div className="mt-12 rounded-2xl p-6" style={{ background: "rgba(0,245,255,0.04)", border: "1px solid rgba(0,245,255,0.12)" }}>
+                <p className="text-xs font-mono text-neon-cyan/60 uppercase tracking-widest mb-4">{"// Try the Tool"}</p>
+                <ToolCard tool={relatedTool} />
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ── Fall back to static post ─────────────────────────────────────────────────
   const post = BLOG_POSTS.find((p) => p.slug === slug);
   if (!post) notFound();
 

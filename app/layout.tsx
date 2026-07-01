@@ -1,11 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 import { Toaster }             from "sonner";
 import { ThemeProvider }       from "@/components/providers/ThemeProvider";
 import { CursorEffect }        from "@/components/animations/CursorEffect";
 import { ErrorRevealProvider } from "@/lib/errors/error-context";
 import { ErrorBoundary }       from "@/lib/errors/error-boundary";
+import { getMaintenanceMode }  from "@/lib/data/settings";
+import { MaintenancePage }     from "@/components/maintenance/MaintenancePage";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -63,7 +66,18 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // ── Maintenance mode gate ─────────────────────────────────────────────────
+  // When enabled by the admin (Settings → Maintenance Mode), every public
+  // route renders the maintenance page instead of its normal content.
+  // /admin/* is exempt so the admin can always log in and disable it again.
+  // x-pathname is set by middleware.ts on every request (Server Components
+  // have no access to usePathname()).
+  const headersList = await headers();
+  const pathname = headersList.get("x-pathname") ?? "";
+  const isAdminRoute = pathname.startsWith("/admin");
+  const maintenanceOn = isAdminRoute ? false : await getMaintenanceMode();
+
   return (
     <html lang="en" suppressHydrationWarning className={inter.variable}>
       <body className="antialiased font-body bg-abyss text-foreground">
@@ -88,7 +102,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {/* Custom cyberpunk cursor (desktop only) */}
               <CursorEffect />
 
-              {children}
+              {maintenanceOn ? <MaintenancePage /> : children}
 
               <Toaster
                 position="bottom-right"
