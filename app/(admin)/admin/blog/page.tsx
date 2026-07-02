@@ -1,12 +1,9 @@
 "use client";
 
-import type { Metadata } from "next";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Plus, Edit2, Trash2, Eye, Clock, CheckCircle2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-
-export const metadata: Metadata = { title: "Blog Manager" };
 
 interface AdminPost {
   id:          string;

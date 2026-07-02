@@ -93,7 +93,7 @@ export function MaintenancePage() {
         {/* Divider */}
         <div className="flex items-center gap-3 justify-center mb-6">
           <div className="flex-1 h-px" style={{ background: "linear-gradient(90deg, transparent, rgba(0,245,255,0.4))" }} />
-          <span className="text-xs font-mono text-neon-cyan tracking-widest">// SYSTEM UPDATE IN PROGRESS</span>
+          <span className="text-xs font-mono text-neon-cyan tracking-widest">{'// SYSTEM UPDATE IN PROGRESS'}</span>
           <div className="flex-1 h-px" style={{ background: "linear-gradient(270deg, transparent, rgba(0,245,255,0.4))" }} />
         </div>
 
