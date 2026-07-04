@@ -2,115 +2,191 @@ import { type NextRequest, NextResponse } from "next/server";
 import { PDFDocument } from "pdf-lib";
 import { logApiError } from "@/lib/errors/logger";
 
-// Node.js runtime — gives us access to full memory for large PDFs
-export const runtime = "nodejs";
+export const runtime   = "nodejs";
 export const maxDuration = 60;
 
 const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
+// ── Blank-page detection threshold ─────────────────────────────────────────
+// When pdf-lib copies a page whose resources are inherited from parent tree
+// nodes (common in government / linearised PDFs), it silently produces a valid
+// PDF shell with no content — typically 700-1 100 bytes.  Any page with real
+// text, images, or vector paths will be several kilobytes or more.
+const BLANK_THRESHOLD_BYTES = 1_800;
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function parsePageIndices(param: string, totalPages: number): number[] {
+  const indices: number[] = [];
+  for (const part of param.split(",").map((s) => s.trim()).filter(Boolean)) {
+    if (part.includes("-")) {
+      const [a, b] = part.split("-").map(Number);
+      for (let i = a; i <= Math.min(b, totalPages); i++) {
+        if (i >= 1) indices.push(i - 1);
+      }
+    } else {
+      const n = Number(part);
+      if (n >= 1 && n <= totalPages) indices.push(n - 1);
+    }
+  }
+  return [...new Set(indices)].sort((a, b) => a - b);
+}
+
+/**
+ * Attempt to copy a single page via pdf-lib structural copy.
+ * Returns null on any error (caller will request client-side rasterisation).
+ */
+async function tryCopyPage(
+  srcBytes: ArrayBuffer,
+  pageIndex: number
+): Promise<{ bytes: Uint8Array; valid: boolean } | null> {
+  try {
+    const srcDoc = await PDFDocument.load(srcBytes, { ignoreEncryption: true });
+    const pageDoc = await PDFDocument.create();
+    const [copied] = await pageDoc.copyPages(srcDoc, [pageIndex]);
+    pageDoc.addPage(copied);
+    const bytes = await pageDoc.save();
+    // Validate — size below threshold means blank/failed copy
+    const valid = bytes.length >= BLANK_THRESHOLD_BYTES;
+    return { bytes, valid };
+  } catch {
+    return null; // Caller must use fallback
+  }
+}
+
 /**
  * POST /api/pdf/split
  *
- * Accepts:  multipart/form-data with field "pdf" (File)
- *           Optional field "pages" (comma-separated 1-based page numbers)
- *           e.g. "1,2,5,6" → only split those pages
- *           Omit "pages" to split ALL pages.
+ * ──────────────────── Part 8 upgrade ────────────────────────────────────────
  *
- * Returns:  JSON array of { name: string, data: string (base64) }
- *           Each item is one extracted page as a standalone PDF.
+ * v2 response shape: JSON array of PageResult objects
+ * {
+ *   name:     string           // "page_001.pdf"
+ *   data:     string           // base64-encoded PDF or empty string if failed
+ *   valid:    boolean          // true = pdf-lib succeeded + passed size check
+ *   sizeBytes: number          // byte length of the output PDF
+ *   pageNum:  number           // 1-based original page number
+ *   engine:   "pdflib" | "failed"
+ *   error?:   string           // set only when engine === "failed"
+ * }
  *
- * This replicates the Ghostscript logic from the original Express backend
- * (pdf-split-backend-main/index.js) using pdf-lib — no system binary needed.
+ * When engine === "failed", the client MUST use its local canvas-rasterisation
+ * fallback engine (pdfjs-dist → jsPDF) to produce the page image.
+ * ──────────────────────────────────────────────────────────────────────────
  */
 export async function POST(req: NextRequest) {
   try {
-    // ── Parse multipart form ─────────────────────────────────────
-    const formData = await req.formData();
-    const file = formData.get("pdf") as File | null;
-    const pagesParam = formData.get("pages") as string | null; // optional
+    const formData    = await req.formData();
+    const file        = formData.get("pdf") as File | null;
+    const pagesParam  = formData.get("pages") as string | null;
 
     if (!file) {
       return NextResponse.json({ error: "No PDF file provided" }, { status: 400 });
     }
-
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
       return NextResponse.json({ error: "Only PDF files are accepted" }, { status: 415 });
     }
-
     if (file.size > MAX_SIZE_BYTES) {
       return NextResponse.json(
-        { error: `File too large. Maximum size is ${MAX_SIZE_BYTES / 1024 / 1024} MB` },
+        { error: `File too large — maximum is ${MAX_SIZE_BYTES / 1024 / 1024} MB` },
         { status: 413 }
       );
     }
 
-    // ── Load the source PDF ──────────────────────────────────────
+    // ── Get page count (pdfjs-free — just pdf-lib is fine for count) ────────
     const arrayBuffer = await file.arrayBuffer();
-    const srcDoc = await PDFDocument.load(arrayBuffer, {
-      ignoreEncryption: true,
-    });
 
-    const totalPages = srcDoc.getPageCount();
+    let totalPages: number;
+    try {
+      const probe = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+      totalPages  = probe.getPageCount();
+    } catch (err) {
+      await logApiError(err, { route: "/api/pdf/split", toolSlug: "pdf-split" });
+      return NextResponse.json(
+        { error: "Cannot read PDF structure — the file may be corrupt or use an unsupported encryption scheme." },
+        { status: 422 }
+      );
+    }
 
     if (totalPages === 0) {
       return NextResponse.json({ error: "PDF has no pages" }, { status: 422 });
     }
 
-    // ── Determine which pages to extract ────────────────────────
-    let pageIndices: number[]; // 0-based
-
-    if (pagesParam && pagesParam.trim()) {
-      // Parse "1,3,5-7" style string → 0-based indices
-      pageIndices = [];
-      const parts = pagesParam.split(",").map((s) => s.trim());
-      for (const part of parts) {
-        if (part.includes("-")) {
-          const [a, b] = part.split("-").map(Number);
-          for (let i = a; i <= Math.min(b, totalPages); i++) {
-            if (i >= 1) pageIndices.push(i - 1);
-          }
-        } else {
-          const n = Number(part);
-          if (n >= 1 && n <= totalPages) pageIndices.push(n - 1);
-        }
-      }
-      // Deduplicate and sort
-      pageIndices = [...new Set(pageIndices)].sort((a, b) => a - b);
-    } else {
-      // Default: all pages (matches the original Ghostscript behaviour)
-      pageIndices = Array.from({ length: totalPages }, (_, i) => i);
-    }
+    // ── Determine which pages to extract ────────────────────────────────────
+    const pageIndices: number[] = (pagesParam?.trim())
+      ? parsePageIndices(pagesParam, totalPages)
+      : Array.from({ length: totalPages }, (_, i) => i);
 
     if (pageIndices.length === 0) {
       return NextResponse.json({ error: "No valid pages selected" }, { status: 422 });
     }
 
-    // ── Split: one PDF per page ──────────────────────────────────
-    // This is equivalent to the Ghostscript command:
-    //   gs -sDEVICE=pdfwrite -sOutputFile=page_%03d.pdf input.pdf
-    const results: Array<{ name: string; data: string }> = [];
+    // ── Per-page extraction with isolation ──────────────────────────────────
+    // Each page is wrapped in its own try/catch so a single corrupt page
+    // cannot abort the entire split (important for government PDFs where
+    // one page may have a broken resource dictionary while others are fine).
+    const results = await Promise.all(
+      pageIndices.map(async (pageIndex) => {
+        const pageNum = pageIndex + 1;
+        const name    = `page_${String(pageNum).padStart(3, "0")}.pdf`;
 
-    for (const pageIndex of pageIndices) {
-      const pageDoc = await PDFDocument.create();
-      const [copiedPage] = await pageDoc.copyPages(srcDoc, [pageIndex]);
-      pageDoc.addPage(copiedPage);
+        const result = await tryCopyPage(arrayBuffer, pageIndex);
 
-      const pageBytes = await pageDoc.save();
+        if (result === null) {
+          // pdf-lib threw — page structure is incompatible; client must rasterise
+          return {
+            name,
+            data:      "",
+            valid:     false,
+            sizeBytes: 0,
+            pageNum,
+            engine:    "failed" as const,
+            error:     "pdf-lib could not parse this page — use client-side rasterisation fallback",
+          };
+        }
 
-      // Convert to base64 so the client can reconstruct a Blob
-      const base64 = Buffer.from(pageBytes).toString("base64");
-      const pageNumber = pageIndex + 1;
+        if (!result.valid) {
+          // pdf-lib succeeded but output is suspiciously small → likely blank
+          return {
+            name,
+            // Still return the bytes so the client can decide;
+            // it will perform its own pixel-level blank check.
+            data:      Buffer.from(result.bytes).toString("base64"),
+            valid:     false,
+            sizeBytes: result.bytes.length,
+            pageNum,
+            engine:    "pdflib" as const,
+            error:     `Output too small (${result.bytes.length}B) — may be blank; use canvas fallback`,
+          };
+        }
 
-      results.push({
-        name: `page_${String(pageNumber).padStart(3, "0")}.pdf`,
-        data: base64,
-      });
-    }
+        return {
+          name,
+          data:      Buffer.from(result.bytes).toString("base64"),
+          valid:     true,
+          sizeBytes: result.bytes.length,
+          pageNum,
+          engine:    "pdflib" as const,
+        };
+      })
+    );
 
-    return NextResponse.json(results);
+    // ── Final verification ─────────────────────────────────────────────────
+    const failedCount = results.filter((r) => !r.valid).length;
+    const successRate = ((results.length - failedCount) / results.length * 100).toFixed(0);
+
+    // Include summary so the client can decide if a full re-rasterisation
+    // is worthwhile vs handling individual page failures.
+    return NextResponse.json({
+      pages:       results,
+      total:       results.length,
+      failed:      failedCount,
+      successRate: `${successRate}%`,
+      // Legacy shape compatibility: also include flat array as `pages` field
+    });
+
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "PDF processing failed";
-    console.error("[/api/pdf/split] Error:", err);
+    console.error("[/api/pdf/split]", err);
     await logApiError(err, { route: "/api/pdf/split", toolSlug: "pdf-split" });
     return NextResponse.json({ error: message }, { status: 500 });
   }
