@@ -116,19 +116,25 @@ async function rasterisePage(
 }
 
 /**
- * Quick blank-page detection: render at tiny resolution and check pixel variance.
- * A blank/white page will have all pixels near 255. Returns true if the page
- * appears to have visible content.
+ * Quick blank-page detection: render the ACTUAL EXTRACTED OUTPUT (a single-page
+ * PDF produced by pdf-lib) at tiny resolution and check pixel variance.
+ *
+ * IMPORTANT: this must render the pdf-lib OUTPUT bytes, not the original
+ * multi-page source. Re-rendering the source (the earlier implementation)
+ * can never detect this exact failure mode: pdfjs-dist correctly decrypts
+ * and renders an encrypted SOURCE PDF (so it always "has content"), even
+ * when pdf-lib's copyPages() has produced a corrupted, still-encrypted,
+ * visually blank OUTPUT page. Only rendering the true output artifact
+ * catches this.
  */
 async function hasVisibleContent(
-  srcBytes: Uint8Array,
-  pageIndex: number,
+  outputBytes: Uint8Array,   // the pdf-lib-produced single-page PDF to validate
   pdfjsLib: typeof import("pdfjs-dist")
 ): Promise<boolean> {
   try {
-    const task = pdfjsLib.getDocument({ data: srcBytes.slice() });
+    const task = pdfjsLib.getDocument({ data: outputBytes.slice() });
     const pdf  = await task.promise;
-    const page = await pdf.getPage(pageIndex + 1);
+    const page = await pdf.getPage(1); // output is always a single page
 
     const vp     = page.getViewport({ scale: 1 });
     const scale  = Math.min(THUMB_SIZE / vp.width, THUMB_SIZE / vp.height);
@@ -155,8 +161,9 @@ async function hasVisibleContent(
     }
     return nonWhite > 5;
   } catch {
-    // If we can't render the thumbnail, assume it has content (fail safe)
-    return true;
+    // If the output PDF can't even be parsed/rendered, treat as blank/broken
+    // (fail closed here — an unparseable "output" is not a good result either way).
+    return false;
   }
 }
 
@@ -216,6 +223,21 @@ export function PdfSplit() {
     } catch (err) {
       // If the entire document cannot be loaded, all pages need fallback
       console.warn("[PdfSplit/primary] Cannot load document:", err);
+      return { results: [], needFallback: pages };
+    }
+
+    // ── Encryption short-circuit ─────────────────────────────────────────────
+    // pdf-lib has no RC4/AES decryption implementation. `ignoreEncryption: true`
+    // only suppresses the "this file is encrypted" error — it does NOT decrypt
+    // the content-stream bytes. copyPages() on an encrypted source copies the
+    // still-ciphertext bytes verbatim into a new (unencrypted) document; any
+    // viewer opening that output tries to interpret ciphertext as PDF drawing
+    // operators, which produces a blank page essentially 100% of the time.
+    // This affects EVERY encrypted PDF, not just malformed ones — so we detect
+    // it upfront and go straight to the canvas-rasterisation engine, which
+    // uses pdfjs-dist (full RC4/AES decryption support) and is proven to work.
+    if (srcDoc.isEncrypted) {
+      console.info("[PdfSplit/primary] Source PDF is encrypted — pdf-lib cannot decrypt content streams; routing all pages to canvas fallback.");
       return { results: [], needFallback: pages };
     }
 
@@ -307,12 +329,12 @@ export function PdfSplit() {
   /**
    * Re-validates pdf-lib results that are small-but-above-threshold.
    * For very complex PDFs, some pages pass the size check but still render
-   * blank because the content stream uses operators pdf-lib can't copy.
-   * We render a tiny thumbnail via pdfjs to catch these.
+   * blank because the content stream uses operators pdf-lib can't copy
+   * (or — as with encrypted PDFs — the "content" is undecoded ciphertext).
+   * We render a tiny thumbnail of the ACTUAL OUTPUT via pdfjs to catch these.
    */
   async function validateAndRerouteBlankPages(
     primaryResults: PageResult[],
-    srcBytes: ArrayBuffer,
     pdfjsLib: typeof import("pdfjs-dist")
   ): Promise<{ valid: PageResult[]; reroutePages: number[] }> {
     // Only validate pages that are small (2-8 KB) — larger pages are very
@@ -320,7 +342,6 @@ export function PdfSplit() {
     const RECHECK_UPPER = 8_000;
     const valid: PageResult[] = [];
     const reroutePages: number[] = [];
-    const srcUint8 = new Uint8Array(srcBytes);
 
     for (const result of primaryResults) {
       if (result.size > RECHECK_UPPER) {
@@ -328,9 +349,11 @@ export function PdfSplit() {
         continue;
       }
 
-      // Small page — run pixel check
-      const pageNum = parseInt(result.name.replace(/\D/g, ""), 10);
-      const hasContent = await hasVisibleContent(srcUint8, pageNum - 1, pdfjsLib);
+      // Small page — run pixel check against the ACTUAL OUTPUT bytes,
+      // not the source. This is what makes the check meaningful.
+      const pageNum   = parseInt(result.name.replace(/\D/g, ""), 10);
+      const outputU8  = new Uint8Array(await result.blob.arrayBuffer());
+      const hasContent = await hasVisibleContent(outputU8, pdfjsLib);
 
       if (hasContent) {
         valid.push(result);
@@ -451,7 +474,6 @@ export function PdfSplit() {
             `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
           const { valid, reroutePages } = await validateAndRerouteBlankPages(
             primaryResults,
-            srcBytes,
             pdfjsLib
           );
           primaryResults = valid;
