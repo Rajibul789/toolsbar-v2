@@ -130,7 +130,15 @@ async function rasterisePageServer(
   srcBytes: Uint8Array,
   pageIndex: number // 0-based
 ): Promise<Uint8Array> {
-  const { DOMMatrix, Path2D, ImageData, createCanvas } = await import("@napi-rs/canvas");
+  // Loaded via createRequire (see top of file) rather than dynamic import().
+  // A literal-string dynamic import() is still a code-splitting point that
+  // webpack's static analyzer traces into, which — independent of the
+  // serverExternalPackages config above — can still attempt to parse the
+  // package's native .node binary and fail the build. A require() obtained
+  // from createRequire is NOT part of webpack's static dependency graph,
+  // so this structurally guarantees the binary is never touched by the
+  // bundler regardless of Next.js/webpack version quirks.
+  const { DOMMatrix, Path2D, ImageData, createCanvas } = requireCjs("@napi-rs/canvas") as typeof import("@napi-rs/canvas");
   // pdfjs-dist's Node compatibility layer checks for these globals before
   // falling back to its own (broken, `canvas`-package-dependent) polyfills.
   (globalThis as Record<string, unknown>).DOMMatrix ??= DOMMatrix;

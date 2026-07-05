@@ -12,6 +12,18 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["framer-motion", "lucide-react"],
   },
+  // @napi-rs/canvas ships platform-specific native .node binary files
+  // (compiled Rust/Skia bindings, one per OS/arch). Webpack's default loader
+  // can only parse JavaScript/TypeScript, so trying to bundle a .node file
+  // fails with "Module parse failed: Unexpected character". This tells
+  // Next.js to leave @napi-rs/canvas out of the Server Components/Route
+  // Handlers bundle entirely and load it via native Node.js require() at
+  // runtime instead — which is exactly how a native addon must be loaded.
+  // pdfjs-dist is included defensively too, since our route also loads its
+  // Node-targeted build (via createRequire, which is itself already
+  // webpack-invisible — this entry is belt-and-suspenders, not strictly
+  // required, but costs nothing and guards against future changes).
+  serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co" },
