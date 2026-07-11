@@ -316,10 +316,13 @@ export default function ErrorCenterPage() {
 
     try {
       const res = await fetch(`/api/admin/errors?${params}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+      }
       setData(await res.json());
-    } catch {
-      toast.error("Failed to load error reports");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load error reports");
     } finally {
       setLoading(false);
     }
@@ -340,15 +343,18 @@ export default function ErrorCenterPage() {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ status: newStatus }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Failed to update status");
+      }
       toast.success(`Status updated → ${STATUS_CONFIG[newStatus].label}`);
       // Update locally without full refetch
       setData((prev) => {
         if (!prev?.reports) return prev;
         return { ...prev, reports: prev.reports.map((r) => r.id === id ? { ...r, status: newStatus } : r) };
       });
-    } catch {
-      toast.error("Failed to update status");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update status");
     }
   }, []);
 
@@ -357,7 +363,10 @@ export default function ErrorCenterPage() {
     if (!confirm("Delete this error report?")) return;
     try {
       const res = await fetch(`/api/admin/errors/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Failed to delete report");
+      }
       toast.success("Report deleted");
       setData((prev) => {
         if (!prev?.reports) return prev;
@@ -367,8 +376,8 @@ export default function ErrorCenterPage() {
           reports: prev.reports.filter((r) => r.id !== id),
         };
       });
-    } catch {
-      toast.error("Failed to delete report");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete report");
     }
   }, []);
 

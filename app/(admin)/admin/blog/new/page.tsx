@@ -94,12 +94,15 @@ export default function NewBlogPostPage() {
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Failed to save");
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Failed to save");
+      }
 
       toast.success(data.status === "PUBLISHED" ? "Post published!" : "Draft saved!");
       router.push("/admin/blog");
-    } catch {
-      toast.error("Failed to save post. Please try again.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save post. Please try again.");
     } finally {
       setIsSaving(false);
     }

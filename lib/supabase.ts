@@ -21,8 +21,24 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl     = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const rawUrl     = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const rawAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!rawUrl || !rawAnonKey) {
+  throw new Error(
+    "NEXT_PUBLIC_SUPABASE_URL and/or NEXT_PUBLIC_SUPABASE_ANON_KEY is not set. " +
+    "Add both to your .env.local file. " +
+    "Find them in: Supabase Dashboard → Project Settings → API."
+  );
+}
+
+// Re-declared as fresh constants so TypeScript carries the non-undefined
+// narrowing from the guard above into getSupabaseAdmin() below — narrowing
+// of the original process.env.* reads doesn't persist into a function
+// declared later in the same file, since TS can't statically guarantee the
+// guard ran before that function is eventually called.
+const supabaseUrl: string     = rawUrl;
+const supabaseAnonKey: string = rawAnonKey;
 
 // ─── Public client (browser-safe, uses anon key) ──────────────────────────────
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

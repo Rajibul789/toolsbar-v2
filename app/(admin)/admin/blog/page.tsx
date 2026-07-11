@@ -31,12 +31,15 @@ export default function AdminBlogPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/blog");
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Could not load blog posts.");
+      }
       const data = await res.json() as { posts: AdminPost[]; total: number };
       // Handle both shapes: unwrapped array (legacy) or { posts, total } object
       setPosts(Array.isArray(data) ? data : (data.posts ?? []));
-    } catch {
-      toast.error("Could not load blog posts.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not load blog posts.");
     } finally {
       setLoading(false);
     }
@@ -49,11 +52,14 @@ export default function AdminBlogPage() {
     setDeleting(id);
     try {
       const res = await fetch(`/api/admin/blog/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Delete failed.");
+      }
       setPosts((p) => p.filter((x) => x.id !== id));
       toast.success("Post deleted — public site updated.");
-    } catch {
-      toast.error("Delete failed.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed.");
     } finally {
       setDeleting(null);
     }

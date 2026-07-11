@@ -33,7 +33,10 @@ export default function AdminToolsPage() {
     async function load() {
       try {
         const res = await fetch("/api/admin/tools");
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error ?? "Could not load DB state.");
+        }
         const dbTools = await res.json() as Array<{
           slug: string; isActive: boolean; isFeatured: boolean; isNew: boolean;
         }>;
@@ -44,8 +47,8 @@ export default function AdminToolsPage() {
           }
           setToolStates(map);
         }
-      } catch {
-        toast.warning("Could not load DB state — showing local defaults.");
+      } catch (err) {
+        toast.warning(err instanceof Error ? err.message : "Could not load DB state — showing local defaults.");
       } finally {
         setLoading(false);
       }
@@ -62,15 +65,18 @@ export default function AdminToolsPage() {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ slug, ...patch }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Save failed.");
+      }
       toast.success("Saved — public site updated");
-    } catch {
+    } catch (err) {
       setToolStates((prev) => {
         const next = { ...prev };
         delete next[slug];
         return next;
       });
-      toast.error("Save failed — please try again.");
+      toast.error(err instanceof Error ? err.message : "Save failed — please try again.");
     } finally {
       setSaving(null);
     }

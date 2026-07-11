@@ -18,10 +18,13 @@ export default function AdminTagsPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/tags");
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Could not load tags.");
+      }
       setTags(await res.json());
-    } catch {
-      toast.error("Could not load tags.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not load tags.");
     } finally {
       setLoading(false);
     }
@@ -39,23 +42,29 @@ export default function AdminTagsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, slug: slugify(name) }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Create failed.");
+      }
       setNewTag(""); setAdding(false);
       toast.success(`Tag #${name} created — blog pages updated.`);
       await load();
-    } catch {
-      toast.error("Create failed.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Create failed.");
     }
   }
 
   async function deleteTag(id: string, name: string) {
     try {
       const res = await fetch(`/api/admin/tags?id=${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Delete failed.");
+      }
       setTags((p) => p.filter((t) => t.id !== id));
       toast.success(`Tag #${name} deleted — blog pages updated.`);
-    } catch {
-      toast.error("Delete failed.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed.");
     }
   }
 

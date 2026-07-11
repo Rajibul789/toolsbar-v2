@@ -21,6 +21,30 @@ import { z } from "zod";
 import prisma from "@/lib/db";
 import { logApiError } from "@/lib/errors/logger";
 
+// ─── IP-based server rate limiting ───────────────────────────────────────────
+// The client-side protection in reporter.ts (localStorage, 5/hour) is trivially
+// bypassed by calling this endpoint directly — it offers no real protection on
+// its own. This mirrors the same server-side safeguard already used in the
+// sibling /api/errors/log route, so both DB-writing error endpoints have
+// equivalent defense-in-depth against flood/DB-bloat abuse.
+const IP_MAP    = new Map<string, number[]>();
+const IP_LIMIT  = 10;      // max 10 reports per IP per minute
+const IP_WINDOW = 60_000;  // 1 minute
+
+function isIpRateLimited(ip: string): boolean {
+  const now     = Date.now();
+  const history = (IP_MAP.get(ip) ?? []).filter((t) => now - t < IP_WINDOW);
+  if (history.length >= IP_LIMIT) return true;
+  history.push(now);
+  IP_MAP.set(ip, history);
+  if (IP_MAP.size > 1000) {
+    for (const [k, times] of IP_MAP.entries()) {
+      if (times.every((t) => now - t >= IP_WINDOW)) IP_MAP.delete(k);
+    }
+  }
+  return false;
+}
+
 // ─── Validation schema ────────────────────────────────────────────────────────
 
 const reportSchema = z.object({
@@ -41,6 +65,17 @@ const reportSchema = z.object({
 // ─── POST handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // IP rate limiting — real protection, unlike the client-side-only guard
+  // this route previously relied on exclusively.
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("x-real-ip") ??
+    "unknown";
+
+  if (isIpRateLimited(ip)) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   try {
     // Parse and validate body
     let body: unknown;

@@ -14,6 +14,11 @@ import { logApiError } from "@/lib/errors/logger";
 import { CACHE_TAGS } from "@/lib/data/tools";
 
 export async function GET() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("admin_token")?.value;
+  const admin = await getAdminFromToken(token ?? "");
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const settings = await prisma.seoSetting.findMany({ orderBy: { key: "asc" } });
     return NextResponse.json(settings);

@@ -51,13 +51,16 @@ export default function AdminSeoPage() {
     async function load() {
       try {
         const res = await fetch("/api/admin/seo");
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error ?? "Could not load SEO settings.");
+        }
         const rows = await res.json() as Array<{ key: string; value: string }>;
         const map: Record<string, string> = {};
         for (const row of rows) map[row.key] = row.value;
         setValues(map);
-      } catch {
-        toast.error("Could not load SEO settings — showing defaults.");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not load SEO settings — showing defaults.");
       } finally {
         setLoading(false);
       }
@@ -81,10 +84,13 @@ export default function AdminSeoPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Save failed.");
+      }
       toast.success("SEO settings saved — public site updated.");
-    } catch {
-      toast.error("Save failed.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed.");
     } finally {
       setSaving(false);
     }

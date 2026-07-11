@@ -21,6 +21,9 @@ async function requireAdmin() {
 }
 
 export async function GET() {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const cats = await prisma.blogCategory.findMany({
       orderBy: { name: "asc" },
@@ -74,6 +77,29 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    // Prisma throws P2003 (foreign key constraint violation) when posts still
+    // reference this category — categoryId is a required field with no
+    // onDelete behavior set, so the delete is correctly blocked at the DB
+    // level rather than silently orphaning or nulling those posts. Detect
+    // this specific case and return a clear, actionable message instead of
+    // a generic 500 that gives the admin no idea what went wrong or how to
+    // fix it. Checking err.code directly (rather than
+    // `instanceof Prisma.PrismaClientKnownRequestError`) is more portable —
+    // Prisma always attaches .code to these errors regardless of exact
+    // generated-client/class-identity state.
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "P2003") {
+      const postCount = await prisma.blogPost.count({ where: { categoryId: id } }).catch(() => null);
+      return NextResponse.json(
+        {
+          error: postCount
+            ? `Cannot delete — ${postCount} post${postCount === 1 ? "" : "s"} still use this category. Reassign or delete ${postCount === 1 ? "it" : "them"} first.`
+            : "Cannot delete — this category is still in use.",
+        },
+        { status: 409 }
+      );
+    }
+
     await logApiError(err, { route: "/api/admin/categories" });
     return NextResponse.json({ error: "Delete failed" }, { status: 500 });
   }

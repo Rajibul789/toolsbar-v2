@@ -28,6 +28,11 @@ const updateSchema = z.object({
 
 // GET all tools (admin view — includes inactive)
 export async function GET() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("admin_token")?.value;
+  const admin = await getAdminFromToken(token ?? "");
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const tools = await prisma.tool.findMany({
       orderBy: [{ order: "asc" }, { name: "asc" }],

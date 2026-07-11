@@ -83,15 +83,18 @@ export default function AdminSettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: next }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Failed to update maintenance mode.");
+      }
       toast.success(
         next
           ? "🔧 Maintenance mode ON — public site is now hidden."
           : "✅ Maintenance mode OFF — public site is live again."
       );
-    } catch {
+    } catch (err) {
       setMaintenanceOn(!next); // revert
-      toast.error("Failed to update maintenance mode.");
+      toast.error(err instanceof Error ? err.message : "Failed to update maintenance mode.");
     } finally {
       setMaintenanceSaving(false);
     }
@@ -108,7 +111,10 @@ export default function AdminSettingsPage() {
     setHealthError(null);
     try {
       const res = await fetch("/api/admin/health");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+      }
       const data = await res.json() as HealthResponse;
       setHealth(data);
       setLastChecked(new Date());

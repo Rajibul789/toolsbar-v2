@@ -10,6 +10,11 @@ import { SETTINGS_CACHE_TAG, MAINTENANCE_CACHE_TAG } from "@/lib/data/settings";
 const KEY = "maintenance_mode";
 
 export async function GET() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("admin_token")?.value;
+  const admin = await getAdminFromToken(token ?? "");
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const row = await prisma.seoSetting.findUnique({ where: { key: KEY }, select: { value: true } });
     return NextResponse.json({ enabled: row?.value === "true" });

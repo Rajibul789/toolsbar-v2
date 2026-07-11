@@ -21,10 +21,13 @@ export default function AdminCategoriesPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/categories");
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Could not load categories.");
+      }
       setCats(await res.json());
-    } catch {
-      toast.error("Could not load categories.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not load categories.");
     } finally {
       setLoading(false);
     }
@@ -43,24 +46,30 @@ export default function AdminCategoriesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: form.name, slug: form.slug }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Create failed.");
+      }
       cancel();
       toast.success("Category created — blog pages updated.");
       await load();
-    } catch {
-      toast.error("Create failed.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Create failed.");
     }
   }
 
   async function deletecat(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? Posts in this category will be uncategorised.`)) return;
+    if (!confirm(`Delete "${name}"? This can't be undone. Categories still used by posts can't be deleted — reassign or delete those posts first.`)) return;
     try {
       const res = await fetch(`/api/admin/categories?id=${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Delete failed.");
+      }
       setCats((p) => p.filter((c) => c.id !== id));
       toast.success("Deleted.");
-    } catch {
-      toast.error("Delete failed.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed.");
     }
   }
 

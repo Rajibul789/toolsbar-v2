@@ -39,35 +39,39 @@ export default function AdminHomepagePage() {
       try {
         // Load homepage config (hero content + section visibility)
         const cfgRes = await fetch("/api/admin/homepage");
-        if (cfgRes.ok) {
-          const rows = await cfgRes.json() as HomepageConfig[];
-          const map: Record<string, string> = {};
-          for (const r of rows) map[r.key] = r.value;
-          setConfigs(map);
-          if (map.hero_headline)    setHeadline(map.hero_headline);
-          if (map.hero_typewriter)  setTypewriterLines(map.hero_typewriter);
+        if (!cfgRes.ok) {
+          const body = await cfgRes.json().catch(() => null);
+          throw new Error(body?.error ?? "Could not load homepage config.");
         }
+        const rows = await cfgRes.json() as HomepageConfig[];
+        const map: Record<string, string> = {};
+        for (const r of rows) map[r.key] = r.value;
+        setConfigs(map);
+        if (map.hero_headline)    setHeadline(map.hero_headline);
+        if (map.hero_typewriter)  setTypewriterLines(map.hero_typewriter);
 
         // Load featured slides from tools API
         const toolsRes = await fetch("/api/admin/tools");
-        if (toolsRes.ok) {
-          const tools = await toolsRes.json() as Array<{
-            slug: string; name: string; isFeatured: boolean;
-            featuredSlide?: { id: string; headline: string; isActive: boolean; order: number };
-          }>;
-          const featured = tools
-            .filter((t) => t.isFeatured)
-            .map((t, i) => ({
-              id:       t.featuredSlide?.id ?? t.slug,
-              headline: t.featuredSlide?.headline ?? t.name.toUpperCase(),
-              isActive: t.featuredSlide?.isActive ?? true,
-              order:    t.featuredSlide?.order ?? i,
-              tool:     { slug: t.slug, name: t.name },
-            }));
-          setSlides(featured);
+        if (!toolsRes.ok) {
+          const body = await toolsRes.json().catch(() => null);
+          throw new Error(body?.error ?? "Could not load featured tools.");
         }
-      } catch {
-        toast.error("Could not load homepage settings.");
+        const tools = await toolsRes.json() as Array<{
+          slug: string; name: string; isFeatured: boolean;
+          featuredSlide?: { id: string; headline: string; isActive: boolean; order: number };
+        }>;
+        const featured = tools
+          .filter((t) => t.isFeatured)
+          .map((t, i) => ({
+            id:       t.featuredSlide?.id ?? t.slug,
+            headline: t.featuredSlide?.headline ?? t.name.toUpperCase(),
+            isActive: t.featuredSlide?.isActive ?? true,
+            order:    t.featuredSlide?.order ?? i,
+            tool:     { slug: t.slug, name: t.name },
+          }));
+        setSlides(featured);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not load homepage settings.");
       } finally {
         setLoading(false);
       }
@@ -96,10 +100,13 @@ export default function AdminHomepagePage() {
           ...SECTIONS.map((s) => ({ key: s.key, value: String(sectionVisible(s.key)) })),
         ]),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Save failed.");
+      }
       toast.success("Homepage settings saved — public site updated.");
-    } catch {
-      toast.error("Save failed.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed.");
     } finally {
       setSaving(false);
     }

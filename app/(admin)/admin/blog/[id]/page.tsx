@@ -148,11 +148,14 @@ export default function EditBlogPostPage() {
     setIsDeleting(true);
     try {
       const res = await fetch(`/api/admin/blog/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Delete failed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Delete failed");
+      }
       toast.success("Post deleted — removed from public site.");
       router.push("/admin/blog");
-    } catch {
-      toast.error("Failed to delete post.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete post.");
       setIsDeleting(false);
     }
   }
