@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Menu, X, Search, Zap, FileText, Image, Type, Share2,
-  Terminal, ChevronDown, Home, BookOpen, LayoutGrid,
+  Terminal, ChevronDown, Home, BookOpen,
   History, Info, Mail, Shield, FileCheck, AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,7 +22,7 @@ interface NavItem {
   href:        string;
   matchStart:  boolean;
   /** If set, the item renders as a dropdown trigger instead of a link. */
-  dropdown?:   "tools" | "categories";
+  dropdown?:   "tools";
   /** Additional pathnames that mark this item as active (besides href). */
   activePaths?: string[];
 }
@@ -39,9 +39,10 @@ interface MobileNavItem {
 
 /* ─────────────────────────────────────────────────
    NAV DEFINITIONS
-   Order matches the Part 4 requirement exactly:
-   1.Home 2.Tools 3.Blog 4.Categories 5.History
-   6.About 7.Contact 8.Privacy Policy 9.Terms 10.Disclaimer
+   1.Home 2.Tools 3.Blog 4.History
+   5.About 6.Contact 7.Privacy Policy 8.Terms 9.Disclaimer
+   (Standalone "Categories" entry removed — category browsing lives inside
+   the Tools dropdown, which already links to every tool category.)
 ───────────────────────────────────────────────── */
 const TOOL_CATEGORIES = [
   { label: "PDF Tools",       href: "/tool-category/pdf-tools",       icon: FileText, color: "#00f5ff" },
@@ -60,9 +61,8 @@ const LEGAL_ITEMS = [
 /** Primary desktop nav items (shown in header bar). */
 const PRIMARY_NAV: NavItem[] = [
   { label: "Home",       href: "/",        matchStart: false },
-  { label: "Tools",      href: "/tools",   matchStart: true,  dropdown: "tools" },
+  { label: "Tools",      href: "/tools",   matchStart: true,  dropdown: "tools", activePaths: ["/tool-category"] },
   { label: "Blog",       href: "/blog",    matchStart: true },
-  { label: "Categories", href: "/tools",   matchStart: true,  dropdown: "categories", activePaths: ["/tool-category"] },
   { label: "History",    href: "/history", matchStart: false },
   { label: "About",      href: "/about",   matchStart: false },
   { label: "Contact",    href: "/contact", matchStart: false },
@@ -71,12 +71,11 @@ const PRIMARY_NAV: NavItem[] = [
 /** Legal items appear in the "More" dropdown on desktop, separate section on mobile. */
 const DESKTOP_MORE_DROPDOWN = "more";
 
-/** All 10 items for mobile (in required order). */
+/** All 9 items for mobile (in required order). */
 const ALL_MOBILE_ITEMS: MobileNavItem[] = [
   { label: "Home",           href: "/",               icon: Home,        matchStart: false },
-  { label: "Tools",          href: "/tools",          icon: Search,      matchStart: true  },
+  { label: "Tools",          href: "/tools",          icon: Search,      matchStart: true,  activePaths: ["/tool-category"] },
   { label: "Blog",           href: "/blog",           icon: BookOpen,    matchStart: true  },
-  { label: "Categories",     href: "/tools",          icon: LayoutGrid,  matchStart: true,  activePaths: ["/tool-category"] },
   { label: "History",        href: "/history",        icon: History,     matchStart: false },
   { label: "About",          href: "/about",          icon: Info,        matchStart: false },
   { label: "Contact",        href: "/contact",        icon: Mail,        matchStart: false },
@@ -246,74 +245,6 @@ export function Header() {
                 );
               }
 
-              /* --- Categories dropdown --- */
-              if (item.dropdown === "categories") {
-                return (
-                  <div
-                    key={item.label}
-                    className="relative"
-                    onMouseEnter={() => setActiveDropdown("categories")}
-                    onMouseLeave={() => setActiveDropdown(null)}
-                  >
-                    <button
-                      className={cn(
-                        "flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-mono transition-all duration-200",
-                        active || activeDropdown === "categories"
-                          ? "text-neon-cyan"
-                          : "text-text-secondary hover:text-text-primary"
-                      )}
-                    >
-                      {item.label}
-                      <ChevronDown className={cn("w-3 h-3 transition-transform duration-200", activeDropdown === "categories" && "rotate-180")} />
-                    </button>
-
-                    <AnimatePresence>
-                      {activeDropdown === "categories" && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                          transition={{ duration: 0.15 }}
-                          className="absolute top-full left-0 mt-1 w-52 rounded-xl overflow-hidden"
-                          style={{
-                            background: "rgba(10, 15, 30, 0.97)",
-                            border: "1px solid rgba(0,245,255,0.15)",
-                            boxShadow: "0 20px 60px rgba(0,0,0,0.8), 0 0 30px rgba(0,245,255,0.05)",
-                            backdropFilter: "blur(20px)",
-                          }}
-                          onMouseEnter={() => setActiveDropdown("categories")}
-                          onMouseLeave={() => setActiveDropdown(null)}
-                        >
-                          {TOOL_CATEGORIES.map((cat) => {
-                            const Icon = cat.icon;
-                            const catActive = pathname.startsWith(cat.href);
-                            return (
-                              <Link
-                                key={cat.href}
-                                href={cat.href}
-                                className={cn(
-                                  "flex items-center gap-3 px-4 py-2.5 text-sm font-mono transition-all duration-150 group/item",
-                                  catActive ? "bg-neon-cyan/5" : "hover:bg-white/3"
-                                )}
-                                style={{ color: catActive ? cat.color : "var(--text-secondary)" }}
-                              >
-                                <Icon
-                                  className="w-4 h-4 flex-shrink-0 transition-transform duration-150 group-hover/item:scale-110"
-                                  style={{ color: cat.color }}
-                                />
-                                <span className="group-hover/item:text-white transition-colors truncate">
-                                  {cat.label}
-                                </span>
-                              </Link>
-                            );
-                          })}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              }
-
               /* --- Plain link --- */
               return (
                 <Link
@@ -453,7 +384,7 @@ export function Header() {
           >
             <div className="px-4 py-3">
 
-              {/* Primary links (1-7) */}
+              {/* Primary links (1-6) */}
               <div className="space-y-0.5 mb-2">
                 {ALL_MOBILE_ITEMS.filter((i) => !i.isLegal).map((item) => {
                   const Icon = item.icon;
