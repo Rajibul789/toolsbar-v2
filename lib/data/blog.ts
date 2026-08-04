@@ -115,15 +115,42 @@ export const getPublishedPosts = unstable_cache(
         tags:          p.tags.map((t) => t.tag),
       }));
 
-      // If DB has posts use them, otherwise fall back to static
+      // Fall back to static sample posts only for a genuinely empty, unfiltered
+      // site (nothing published yet) — not when a specific category/tag filter
+      // legitimately matched zero posts, which should show an empty state.
       if (posts.length > 0) return { posts, total };
-      return { posts: STATIC_POSTS, total: STATIC_POSTS.length };
+      if (!categorySlug && !tagSlug) return { posts: STATIC_POSTS, total: STATIC_POSTS.length };
+      return { posts: [], total: 0 };
 
     } catch {
       return { posts: STATIC_POSTS, total: STATIC_POSTS.length };
     }
   },
   ["published-posts"],
+  { tags: [CACHE_TAGS.blogPosts], revalidate: 60 }
+);
+
+/**
+ * Fetch the admin-curated featured post slugs, in order (see
+ * app/api/admin/blog/featured/route.ts, which writes this same key).
+ * Empty array means no curation has been done — callers should fall back
+ * to their own default ("newest post is featured", etc.).
+ */
+export const getFeaturedPostSlugs = unstable_cache(
+  async (): Promise<string[]> => {
+    try {
+      const row = await prisma.homepageConfig.findUnique({
+        where: { key: "featured_post_slugs" },
+        select: { value: true },
+      });
+      if (!row?.value) return [];
+      const parsed = JSON.parse(row.value);
+      return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === "string") : [];
+    } catch {
+      return [];
+    }
+  },
+  ["featured-post-slugs"],
   { tags: [CACHE_TAGS.blogPosts], revalidate: 60 }
 );
 
@@ -144,5 +171,41 @@ export const getPostBySlug = unstable_cache(
     }
   },
   ["post-by-slug"],
+  { tags: [CACHE_TAGS.blogPosts], revalidate: 60 }
+);
+
+/** Static fallback category metadata — mirrors the 5 built-in tool categories */
+const STATIC_CATEGORIES: Record<string, { name: string; description: string; color: string }> = {
+  "pdf-tools":       { name: "PDF Tools",          description: "Guides on splitting, merging, compressing, and converting PDFs.",    color: "#00f5ff" },
+  "image-tools":     { name: "Image Tools",        description: "Tutorials on image compression, conversion, and optimization.",     color: "#bf00ff" },
+  "text-tools":      { name: "Text & Document",    description: "Guides for Word to PDF, text conversion, and document workflows.",  color: "#00ff88" },
+  "social-tools":    { name: "Social & Marketing", description: "Tips for hashtags, link sharing, and content optimization.",         color: "#ff00aa" },
+  "developer-tools": { name: "Developer Tools",    description: "Tutorials for QR codes, code packaging, and developer utilities.",   color: "#ff6600" },
+};
+
+/**
+ * Fetch a blog category's display metadata by slug from the DB (any category
+ * an admin creates in Category Manager), falling back to the 5 built-in
+ * tool-category entries if the DB is unavailable or the slug isn't found
+ * there either. Returns null only when the category truly doesn't exist
+ * anywhere, so the page can 404 correctly instead of guessing.
+ */
+export const getCategoryBySlug = unstable_cache(
+  async (slug: string): Promise<{ name: string; description: string; color: string } | null> => {
+    try {
+      const cat = await prisma.blogCategory.findUnique({ where: { slug } });
+      if (cat) {
+        return {
+          name: cat.name,
+          description: cat.description ?? STATIC_CATEGORIES[slug]?.description ?? `Articles in ${cat.name}.`,
+          color: cat.color ?? STATIC_CATEGORIES[slug]?.color ?? "#00f5ff",
+        };
+      }
+      return STATIC_CATEGORIES[slug] ?? null;
+    } catch {
+      return STATIC_CATEGORIES[slug] ?? null;
+    }
+  },
+  ["category-by-slug"],
   { tags: [CACHE_TAGS.blogPosts], revalidate: 60 }
 );

@@ -3,6 +3,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 import prisma from "@/lib/db";
+import { getSessionDurationMs } from "@/lib/data/settings";
 import { logAuthError } from "@/lib/errors/logger";
 
 const schema = z.object({
@@ -80,7 +81,8 @@ export async function POST(req: NextRequest) {
 
     // Create session token
     const token = randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const durationMs = await getSessionDurationMs();
+    const expiresAt = new Date(Date.now() + durationMs);
 
     await prisma.adminSession.create({
       data: { adminId: admin.id, token, expiresAt },

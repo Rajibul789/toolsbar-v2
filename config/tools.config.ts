@@ -577,7 +577,7 @@ export const TOOLS_CONFIG: ToolConfig[] = [
     acceptedTypes: ["application/pdf"],
     acceptedExtensions: [".pdf"],
     isNew: true,
-    order: 12,
+    order: 16,
     keywords: ["pdf to excel", "pdf to xlsx", "extract pdf table", "pdf spreadsheet"],
     howItWorks: [
       "Upload your PDF file.",

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Calendar, Clock } from "lucide-react";
 import { BlogSearch } from "@/components/blog/BlogSearch";
-import { getPublishedPosts, type PublicBlogPost } from "@/lib/data/blog";
+import { getPublishedPosts, getFeaturedPostSlugs, type PublicBlogPost } from "@/lib/data/blog";
 
 export const metadata: Metadata = {
   title: "Blog – PDF & Image Tool Guides | ToolsBar",
@@ -88,9 +88,20 @@ function BlogCard({ post, featured = false }: { post: PublicBlogPost; featured?:
 // Server component — fetches posts from DB (with static fallback).
 // Invalidated by revalidateTag("blog-posts") in admin API routes.
 export default async function BlogPage() {
-  const { posts } = await getPublishedPosts({ limit: 20 });
-  const featured = posts.find((_, i) => i === 0) ?? null;
-  const rest = posts.slice(1);
+  const [{ posts }, featuredSlugs] = await Promise.all([
+    getPublishedPosts({ limit: 20 }),
+    getFeaturedPostSlugs(),
+  ]);
+
+  // Admin-curated posts (Featured Blog Posts page) take priority, in their
+  // chosen order. If nothing's been curated yet, fall back to the original
+  // behavior: the newest post is treated as featured.
+  const curated = featuredSlugs
+    .map((slug) => posts.find((p) => p.slug === slug))
+    .filter((p): p is PublicBlogPost => Boolean(p));
+  const featuredList = curated.length > 0 ? curated : (posts[0] ? [posts[0]] : []);
+  const featuredSlugSet = new Set(featuredList.map((p) => p.slug));
+  const rest = posts.filter((p) => !featuredSlugSet.has(p.slug));
 
   return (
     <div className="min-h-screen pt-24 pb-20">
@@ -110,7 +121,9 @@ export default async function BlogPage() {
 
         {/* Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-8">
-          {featured && <BlogCard post={featured} featured />}
+          {featuredList.map((post) => (
+            <BlogCard key={post.slug} post={post} featured />
+          ))}
           {rest.map((post) => (
             <BlogCard key={post.slug} post={post} />
           ))}

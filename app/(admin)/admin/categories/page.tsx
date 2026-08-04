@@ -44,7 +44,7 @@ export default function AdminCategoriesPage() {
       const res = await fetch("/api/admin/categories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: form.name, slug: form.slug }),
+        body: JSON.stringify({ name: form.name, slug: form.slug, color: form.color }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -55,6 +55,27 @@ export default function AdminCategoriesPage() {
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Create failed.");
+    }
+  }
+
+  async function saveEdit(id: string) {
+    if (!form.name.trim()) { toast.error("Name required"); return; }
+    try {
+      const res = await fetch(`/api/admin/categories?id=${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: form.name, slug: form.slug, color: form.color }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Update failed.");
+      }
+      const updated = await res.json();
+      setCats((p) => p.map((c) => (c.id === id ? updated : c)));
+      cancel();
+      toast.success("Category updated.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed.");
     }
   }
 
@@ -118,13 +139,7 @@ export default function AdminCategoriesPage() {
         {cats.map((cat) => (
           <div key={cat.id}>
             {editing === cat.id ? (
-              <Row onSave={async () => {
-                if (!form.name.trim()) { toast.error("Name required"); return; }
-                // Note: PATCH for categories can be added to the API if needed;
-                // for now update locally and show a reload prompt
-                setEditing(null);
-                toast.info("Category name editing requires a page reload to persist.");
-              }} />
+              <Row onSave={() => saveEdit(cat.id)} />
             ) : (
               <div className="flex items-center gap-4 px-4 py-3.5 rounded-xl group transition-all"
                 style={{ background: "rgba(10,15,30,0.8)", border: "1px solid rgba(0,245,255,0.06)" }}>

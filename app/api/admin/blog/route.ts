@@ -19,6 +19,8 @@ const createSchema = z.object({
   seoKeywords:     z.string().optional(),
   relatedToolSlug: z.string().optional(),
   faqSchema:       z.unknown().optional(),
+  tagIds:          z.array(z.string()).optional(),
+  featuredImage:   z.string().optional(),
 });
 
 // GET: list ALL posts for admin (no status filter — drafts/scheduled/archived all visible)
@@ -81,14 +83,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { categoryId, faqSchema, ...data } = parsed.data;
+    const { categoryId, faqSchema, tagIds, ...data } = parsed.data;
 
-    // Resolve or create category
-    let category = await prisma.blogCategory.findFirst({ where: { slug: categoryId } });
+    // categoryId comes from a live <select> populated by /api/admin/categories,
+    // so it should always be a real BlogCategory id. Validate rather than
+    // trust it blindly — a stale/tampered value should fail with a clear
+    // 400, not an opaque foreign-key error from Prisma.
+    const category = await prisma.blogCategory.findUnique({ where: { id: categoryId } });
     if (!category) {
-      category = await prisma.blogCategory.create({
-        data: { name: categoryId, slug: categoryId },
-      });
+      return NextResponse.json({ error: "Selected category no longer exists. Please pick another." }, { status: 400 });
     }
 
     const post = await prisma.blogPost.create({
@@ -98,6 +101,9 @@ export async function POST(req: NextRequest) {
         categoryId:  category.id,
         publishedAt: data.status === "PUBLISHED" ? new Date() : undefined,
         faqSchema:   faqSchema ?? undefined,
+        tags: tagIds && tagIds.length > 0
+          ? { create: tagIds.map((tagId) => ({ tagId })) }
+          : undefined,
       },
     });
 

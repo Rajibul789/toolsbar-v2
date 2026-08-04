@@ -3,6 +3,7 @@
  *
  * GET    — list all blog categories
  * POST   — create a new category
+ * PATCH  — rename a category (query param ?id=...)
  * DELETE — remove a category (query param ?id=...)
  */
 import { type NextRequest, NextResponse } from "next/server";
@@ -39,6 +40,7 @@ export async function GET() {
 const createSchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -59,6 +61,45 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     await logApiError(err, { route: "/api/admin/categories" });
     return NextResponse.json({ error: "Create failed" }, { status: 500 });
+  }
+}
+
+const updateSchema = z.object({
+  name: z.string().min(2).optional(),
+  slug: z.string().min(2).regex(/^[a-z0-9-]+$/).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+});
+
+export async function PATCH(req: NextRequest) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const id = new URL(req.url).searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  try {
+    const parsed = updateSchema.safeParse(await req.json());
+    if (!parsed.success)
+      return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
+    if (Object.keys(parsed.data).length === 0)
+      return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+
+    const cat = await prisma.blogCategory.update({ where: { id }, data: parsed.data });
+
+    revalidateTag(CACHE_TAGS.blogPosts);
+    revalidatePath("/blog");
+
+    return NextResponse.json(cat);
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "P2002") {
+      return NextResponse.json({ error: "A category with that slug already exists." }, { status: 409 });
+    }
+    if (code === "P2025") {
+      return NextResponse.json({ error: "Category not found." }, { status: 404 });
+    }
+    await logApiError(err, { route: "/api/admin/categories" });
+    return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
 }
 

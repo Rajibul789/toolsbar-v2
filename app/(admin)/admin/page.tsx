@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { BarChart3, FileText, Wrench, TrendingUp, Eye, Zap, BookOpen, Settings } from "lucide-react";
 import Link from "next/link";
-import { TOOLS_CONFIG } from "@/config/tools.config";
+import { TOOLS_CONFIG, TOOL_CATEGORIES } from "@/config/tools.config";
+import { getToolStateMap } from "@/lib/data/tools";
+import prisma from "@/lib/db";
 
 export const metadata: Metadata = {
   title: "Admin Dashboard | ToolsBar",
@@ -17,9 +19,17 @@ const QUICK_LINKS = [
   { label: "Settings",         href: "/admin/settings", icon: Settings, color: "#ff00aa", desc: "Admin preferences & security" },
 ];
 
-export default function AdminDashboard() {
-  const featuredCount = TOOLS_CONFIG.filter((t) => t.isFeatured).length;
-  const newCount      = TOOLS_CONFIG.filter((t) => t.isNew).length;
+export default async function AdminDashboard() {
+  // Merge live DB overrides with static config, same as the Tools admin page —
+  // so these counts match what's actually toggled on, not just the config file.
+  const [toolStates, dbOk] = await Promise.all([
+    getToolStateMap(),
+    prisma.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
+  ]);
+  const mergedTools = TOOLS_CONFIG.map((t) => ({ ...t, ...(toolStates[t.slug] ?? {}) }));
+  const featuredCount = mergedTools.filter((t) => t.isFeatured).length;
+  const newCount      = mergedTools.filter((t) => t.isNew).length;
+  const now = new Date();
 
   return (
     <div className="p-6 lg:p-8">
@@ -37,7 +47,7 @@ export default function AdminDashboard() {
               ADMIN DASHBOARD
             </h1>
             <p className="text-xs font-mono text-text-muted">
-              ToolsBar Control Center · {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              ToolsBar Control Center · {now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
             </p>
           </div>
         </div>
@@ -46,10 +56,10 @@ export default function AdminDashboard() {
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
-          { label: "Total Tools",    value: TOOLS_CONFIG.length, color: "#00f5ff", icon: Wrench },
-          { label: "Featured Tools", value: featuredCount,       color: "#bf00ff", icon: BarChart3 },
-          { label: "New Badges",     value: newCount,            color: "#00ff88", icon: TrendingUp },
-          { label: "Categories",     value: 5,                   color: "#ff6600", icon: FileText },
+          { label: "Total Tools",    value: TOOLS_CONFIG.length,     color: "#00f5ff", icon: Wrench },
+          { label: "Featured Tools", value: featuredCount,           color: "#bf00ff", icon: BarChart3 },
+          { label: "New Badges",     value: newCount,                color: "#00ff88", icon: TrendingUp },
+          { label: "Categories",     value: TOOL_CATEGORIES.length,  color: "#ff6600", icon: FileText },
         ].map(({ label, value, color, icon: Icon }) => (
           <div
             key={label}
@@ -102,28 +112,30 @@ export default function AdminDashboard() {
       </div>
 
       {/* System status */}
-      <div
-        className="mt-8 rounded-xl p-5"
-        style={{
-          background: "rgba(0,255,136,0.04)",
-          border: "1px solid rgba(0,255,136,0.12)",
-        }}
+      <Link
+        href="/admin/settings"
+        className="mt-8 block rounded-xl p-5 transition-colors"
+        style={dbOk
+          ? { background: "rgba(0,255,136,0.04)", border: "1px solid rgba(0,255,136,0.12)" }
+          : { background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.15)" }}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div
-              className="w-2 h-2 rounded-full bg-neon-green"
-              style={{ boxShadow: "0 0 6px rgba(0,255,136,0.8)" }}
+              className="w-2 h-2 rounded-full"
+              style={dbOk
+                ? { background: "#00ff88", boxShadow: "0 0 6px rgba(0,255,136,0.8)" }
+                : { background: "#ef4444", boxShadow: "0 0 6px rgba(239,68,68,0.8)" }}
             />
-            <span className="text-xs font-mono text-neon-green font-semibold tracking-wider">
-              ALL SYSTEMS OPERATIONAL
+            <span className="text-xs font-mono font-semibold tracking-wider" style={{ color: dbOk ? "#00ff88" : "#ef4444" }}>
+              {dbOk ? "ALL SYSTEMS OPERATIONAL" : "DATABASE UNREACHABLE"}
             </span>
           </div>
           <span className="text-xs font-mono text-text-muted">
-            Last checked: just now
+            Checked: {now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })} · Full health check →
           </span>
         </div>
-      </div>
+      </Link>
     </div>
   );
 }

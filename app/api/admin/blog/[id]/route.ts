@@ -19,6 +19,7 @@ const updateSchema = z.object({
   seoKeywords:     z.string().optional(),
   relatedToolSlug: z.string().optional(),
   featuredImage:   z.string().optional(),
+  tagIds:          z.array(z.string()).optional(),
 });
 
 async function auth() {
@@ -55,7 +56,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Invalid data", details: parsed.error.flatten() }, { status: 400 });
 
-    const data: Record<string, unknown> = { ...parsed.data };
+    const { tagIds, ...data }: Record<string, unknown> & { tagIds?: string[] } = { ...parsed.data };
+
+    if (typeof data.categoryId === "string") {
+      const category = await prisma.blogCategory.findUnique({ where: { id: data.categoryId } });
+      if (!category) {
+        return NextResponse.json({ error: "Selected category no longer exists. Please pick another." }, { status: 400 });
+      }
+    }
 
     // ── publishedAt sync ──────────────────────────────────────────────────────
     // Rule: publishedAt must always accurately reflect the post's public state.
@@ -73,7 +81,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       data.publishedAt = null;  // clear — draft/archived posts must NOT have a publishedAt
     }
 
-    const post = await prisma.blogPost.update({ where: { id }, data });
+    const post = await prisma.blogPost.update({
+      where: { id },
+      data: {
+        ...data,
+        ...(tagIds ? { tags: { deleteMany: {}, create: tagIds.map((tagId) => ({ tagId })) } } : {}),
+      },
+    });
 
     // Invalidate public blog pages so edits (including publish/unpublish) reflect immediately
     revalidateTag(CACHE_TAGS.blogPosts);

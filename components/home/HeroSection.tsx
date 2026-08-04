@@ -32,7 +32,13 @@ const TRUST_BADGES = [
   { icon: Zap,    text: "Instant Processing" },
 ];
 
-export function HeroSection() {
+export function HeroSection({
+  headline = "FREE ONLINE TOOLS",
+  typewriterLines = TYPEWRITER_TEXTS,
+}: {
+  headline?: string;
+  typewriterLines?: string[];
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ReturnType<typeof searchTools>>([]);
@@ -113,7 +119,7 @@ export function HeroSection() {
             className="text-display text-4xl sm:text-6xl lg:text-7xl font-black text-white leading-tight mb-4"
             active
           >
-            FREE ONLINE TOOLS
+            {headline}
           </GlitchText>
         </motion.div>
 
@@ -124,7 +130,7 @@ export function HeroSection() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
         >
-          <TypeWriter texts={TYPEWRITER_TEXTS} speed={55} deleteSpeed={25} />
+          <TypeWriter texts={typewriterLines} speed={55} deleteSpeed={25} />
         </motion.p>
 
         <motion.p

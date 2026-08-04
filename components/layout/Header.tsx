@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Menu, X, Search, Zap, FileText, Image, Type, Share2,
   Terminal, ChevronDown, Home, BookOpen,
-  History, Info, Mail, Shield, FileCheck, AlertCircle,
+  History, Info, Mail, Shield, FileCheck, AlertCircle, Cookie,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GlitchText } from "@/components/animations/GlitchText";
@@ -56,6 +56,7 @@ const LEGAL_ITEMS = [
   { label: "Privacy Policy", href: "/privacy-policy", icon: Shield,      color: "#00f5ff" },
   { label: "Terms",          href: "/terms",          icon: FileCheck,   color: "#00ff88" },
   { label: "Disclaimer",     href: "/disclaimer",     icon: AlertCircle, color: "#ff6600" },
+  { label: "Cookie Policy",  href: "/cookie-policy",  icon: Cookie,      color: "#bf00ff" },
 ];
 
 /** Primary desktop nav items (shown in header bar). */
@@ -82,6 +83,7 @@ const ALL_MOBILE_ITEMS: MobileNavItem[] = [
   { label: "Privacy Policy", href: "/privacy-policy", icon: Shield,      matchStart: false, isLegal: true },
   { label: "Terms",          href: "/terms",          icon: FileCheck,   matchStart: false, isLegal: true },
   { label: "Disclaimer",     href: "/disclaimer",     icon: AlertCircle, matchStart: false, isLegal: true },
+  { label: "Cookie Policy",  href: "/cookie-policy",  icon: Cookie,      matchStart: false, isLegal: true },
 ];
 
 function isActive(

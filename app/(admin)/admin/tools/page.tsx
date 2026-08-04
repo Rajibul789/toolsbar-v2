@@ -58,6 +58,7 @@ export default function AdminToolsPage() {
 
   async function updateTool(slug: string, patch: Partial<ToolState>) {
     setSaving(slug);
+    const previous = toolStates[slug];
     setToolStates((prev) => ({ ...prev, [slug]: { ...prev[slug], ...patch } }));
     try {
       const res = await fetch("/api/admin/tools", {
@@ -73,7 +74,8 @@ export default function AdminToolsPage() {
     } catch (err) {
       setToolStates((prev) => {
         const next = { ...prev };
-        delete next[slug];
+        if (previous) next[slug] = previous;
+        else delete next[slug];
         return next;
       });
       toast.error(err instanceof Error ? err.message : "Save failed — please try again.");

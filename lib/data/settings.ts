@@ -11,6 +11,15 @@ import prisma from "@/lib/db";
 
 export const SETTINGS_CACHE_TAG = "settings";
 export const MAINTENANCE_CACHE_TAG = "maintenance-mode";
+export const SESSION_DURATION_CACHE_TAG = "session-duration";
+
+/** Allowed session durations, in milliseconds — matches the Settings page dropdown */
+export const SESSION_DURATIONS_MS: Record<string, number> = {
+  "12h": 12 * 60 * 60 * 1000,
+  "1d":  24 * 60 * 60 * 1000,
+  "7d":  7 * 24 * 60 * 60 * 1000,
+};
+export const DEFAULT_SESSION_DURATION_KEY = "7d";
 
 // ── Maintenance mode ──────────────────────────────────────────────────────────
 /**
@@ -35,4 +44,26 @@ export const getMaintenanceMode = unstable_cache(
   },
   ["maintenance-mode"],
   { tags: [SETTINGS_CACHE_TAG, MAINTENANCE_CACHE_TAG], revalidate: 10 }
+);
+
+// ── Session duration ──────────────────────────────────────────────────────────
+/**
+ * Returns how long a new admin session should stay active, in milliseconds.
+ * Read by the login route when issuing a session. Defaults to 7 days
+ * (the previous hardcoded value) if unset or the DB is unreachable.
+ */
+export const getSessionDurationMs = unstable_cache(
+  async (): Promise<number> => {
+    try {
+      const row = await prisma.seoSetting.findUnique({
+        where:  { key: "session_duration" },
+        select: { value: true },
+      });
+      return (row?.value && SESSION_DURATIONS_MS[row.value]) || SESSION_DURATIONS_MS[DEFAULT_SESSION_DURATION_KEY];
+    } catch {
+      return SESSION_DURATIONS_MS[DEFAULT_SESSION_DURATION_KEY];
+    }
+  },
+  ["session-duration"],
+  { tags: [SETTINGS_CACHE_TAG, SESSION_DURATION_CACHE_TAG], revalidate: 30 }
 );

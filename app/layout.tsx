@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { headers } from "next/headers";
+import Script from "next/script";
 import "./globals.css";
 import { Toaster }             from "sonner";
 import { ThemeProvider }       from "@/components/providers/ThemeProvider";
@@ -9,6 +10,7 @@ import { ErrorRevealProvider } from "@/lib/errors/error-context";
 import { ErrorBoundary }       from "@/lib/errors/error-boundary";
 import { getMaintenanceMode }  from "@/lib/data/settings";
 import { MaintenancePage }     from "@/components/maintenance/MaintenancePage";
+import { getSeoSettings }      from "@/lib/data/seo";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -16,48 +18,51 @@ const inter = Inter({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://toolsbar.com"),
-  title: {
-    template: "%s | ToolsBar – Free Online Tools",
-    default:  "ToolsBar – Free Online PDF, Image & Developer Tools",
-  },
-  description:
-    "ToolsBar provides 15+ free, privacy-first online tools for PDF processing, image editing, text conversion, and developer utilities — all running 100% in your browser.",
-  keywords: [
-    "free online tools","pdf tools","image compressor","pdf split","pdf merge",
-    "word to pdf","image converter","hashtag generator","url shortener","browser tools",
-    "ocr","qr scanner","text to pdf","pdf to text",
-  ],
-  authors:    [{ name: "ToolsBar Team" }],
-  creator:    "ToolsBar",
-  publisher:  "ToolsBar",
-  robots: {
-    index: true, follow: true,
-    googleBot: {
-      index: true, follow: true,
-      "max-video-preview": -1, "max-image-preview": "large", "max-snippet": -1,
+export async function generateMetadata(): Promise<Metadata> {
+  const seo = await getSeoSettings();
+  return {
+    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://toolsbar.com"),
+    title: {
+      template: `%s | ${seo.ogSiteName} – Free Online Tools`,
+      default:  seo.siteTitle,
     },
-  },
-  openGraph: {
-    type: "website", locale: "en_US",
-    url: "https://toolsbar.com", siteName: "ToolsBar",
-    title: "ToolsBar – Free Online PDF, Image & Developer Tools",
-    description: "15+ free privacy-first tools. No uploads. No signups. Just results.",
-    images: [{ url: "/images/og-image.jpg", width: 1200, height: 630, alt: "ToolsBar" }],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "ToolsBar – Free Online PDF, Image & Developer Tools",
-    description: "15+ free privacy-first tools. No uploads. No signups.",
-    images: ["/images/og-image.jpg"],
-  },
-  manifest: "/manifest.json",
-  icons: {
-    icon:  [{ url: "/favicon.ico" }, { url: "/icons/icon-32.png", sizes: "32x32", type: "image/png" }],
-    apple: [{ url: "/icons/apple-icon.png", sizes: "180x180", type: "image/png" }],
-  },
-};
+    description: seo.siteDescription,
+    keywords: seo.siteKeywords.split(",").map((k) => k.trim()).filter(Boolean),
+    authors:    [{ name: "ToolsBar Team" }],
+    creator:    seo.ogSiteName,
+    publisher:  seo.ogSiteName,
+    robots: {
+      index: true, follow: true,
+      googleBot: {
+        index: true, follow: true,
+        "max-video-preview": -1, "max-image-preview": "large", "max-snippet": -1,
+      },
+    },
+    openGraph: {
+      type: "website", locale: "en_US",
+      url: "https://toolsbar.com", siteName: seo.ogSiteName,
+      title: seo.siteTitle,
+      description: seo.siteDescription,
+      images: [{ url: seo.ogImageUrl, width: 1200, height: 630, alt: seo.ogSiteName }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      site: seo.ogTwitterHandle || undefined,
+      title: seo.siteTitle,
+      description: seo.siteDescription,
+      images: [seo.ogImageUrl],
+    },
+    manifest: "/manifest.json",
+    icons: {
+      icon:  [{ url: "/favicon.ico" }, { url: "/icons/icon-32.png", sizes: "32x32", type: "image/png" }],
+      apple: [{ url: "/icons/apple-icon.png", sizes: "180x180", type: "image/png" }],
+    },
+    verification: {
+      google: seo.googleVerification || undefined,
+      other: seo.bingVerification ? { "msvalidate.01": seo.bingVerification } : undefined,
+    },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor:   "#010610",
@@ -77,10 +82,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const pathname = headersList.get("x-pathname") ?? "";
   const isAdminRoute = pathname.startsWith("/admin");
   const maintenanceOn = isAdminRoute ? false : await getMaintenanceMode();
+  const { googleAnalyticsId } = await getSeoSettings();
 
   return (
     <html lang="en" suppressHydrationWarning className={inter.variable}>
       <body className="antialiased font-body bg-abyss text-foreground">
+        {googleAnalyticsId && (
+          <>
+            <Script src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`} strategy="afterInteractive" />
+            <Script id="ga4-init" strategy="afterInteractive">
+              {`window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${googleAnalyticsId}');`}
+            </Script>
+          </>
+        )}
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
           {/*
             Error Reveal System providers.

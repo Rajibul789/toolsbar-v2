@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Save, Eye, ArrowLeft, Trash2, RefreshCw, CheckCircle2 } from "lucide-react";
+import { Save, Eye, ArrowLeft, Trash2, RefreshCw, CheckCircle2, Image as ImageIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -28,10 +28,12 @@ const schema = z.object({
   seoDesc:         z.string().optional(),
   seoKeywords:     z.string().optional(),
   relatedToolSlug: z.string().optional(),
+  featuredImage:   z.string().optional(),
 });
 type FormData = z.infer<typeof schema>;
 
-const BLOG_CATEGORIES = ["PDF Tools","Image Tools","Text Tools","Social Tools","Developer Tools","Tutorials","News"];
+interface CategoryOption { id: string; name: string; }
+interface TagOption { id: string; name: string; }
 
 const STATUS_INFO: Record<string, { label: string; color: string; icon: string }> = {
   PUBLISHED: { label: "Published — visible publicly", color: "#00ff88", icon: "🟢" },
@@ -50,6 +52,24 @@ export default function EditBlogPostPage() {
   const [isSaving,  setIsSaving]  = useState(false);
   const [isDeleting,setIsDeleting]= useState(false);
   const [currentStatus, setCurrentStatus] = useState<string>("DRAFT");
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [tags, setTags] = useState<TagOption[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/categories")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: CategoryOption[]) => setCategories(data))
+      .catch(() => setCategories([]));
+    fetch("/api/admin/tags")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: TagOption[]) => setTags(data))
+      .catch(() => setTags([]));
+  }, []);
+
+  function toggleTag(tagId: string) {
+    setSelectedTagIds((p) => (p.includes(tagId) ? p.filter((t) => t !== tagId) : [...p, tagId]));
+  }
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors, isDirty } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -57,6 +77,26 @@ export default function EditBlogPostPage() {
   });
 
   const watchedStatus = watch("status");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const featuredImage = watch("featuredImage");
+
+  async function handleImageFile(file: File | undefined) {
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/admin/blog/upload-image", { method: "POST", body: form });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? "Upload failed.");
+      setValue("featuredImage", body.url, { shouldDirty: true });
+      toast.success("Image uploaded.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
 
   // ── Load real post data from DB on mount ───────────────────────────────────
   // Root-cause fix: the previous implementation used hardcoded defaultValues
@@ -74,26 +114,29 @@ export default function EditBlogPostPage() {
         const post = await res.json() as {
           id: string; title: string; slug: string; excerpt: string;
           content: string; status: string;
-          categoryId: string; category?: { slug: string };
+          categoryId: string;
           seoTitle?: string; seoDesc?: string; seoKeywords?: string;
-          relatedToolSlug?: string;
+          relatedToolSlug?: string; featuredImage?: string;
+          tags?: Array<{ tagId: string }>;
         };
 
         // Populate the markdown editor
         setContent(post.content);
         setCurrentStatus(post.status);
+        setSelectedTagIds((post.tags ?? []).map((t) => t.tagId));
 
         // Populate all react-hook-form fields with actual DB values
         reset({
           title:           post.title,
           slug:            post.slug,
           excerpt:         post.excerpt,
-          categoryId:      post.category?.slug ?? post.categoryId,
+          categoryId:      post.categoryId,
           status:          post.status as FormData["status"],
           seoTitle:        post.seoTitle ?? "",
           seoDesc:         post.seoDesc ?? "",
           seoKeywords:     post.seoKeywords ?? "",
           relatedToolSlug: post.relatedToolSlug ?? "",
+          featuredImage:   post.featuredImage ?? "",
         });
       } catch {
         toast.error("Failed to load post.");
@@ -115,7 +158,7 @@ export default function EditBlogPostPage() {
       const res = await fetch(`/api/admin/blog/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, content }),
+        body: JSON.stringify({ ...data, content, tagIds: selectedTagIds }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Save failed" }));
@@ -272,10 +315,76 @@ export default function EditBlogPostPage() {
             <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-3">Category</label>
             <select {...register("categoryId")} className="input-cyber w-full text-sm">
               <option value="">Select category</option>
-              {BLOG_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat.toLowerCase().replace(/\s+/g, "-")}>{cat}</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
+          </div>
+
+          <div className="glass-panel p-5">
+            <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-3">Tags</label>
+            {tags.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => {
+                  const active = selectedTagIds.includes(tag.id);
+                  return (
+                    <button key={tag.id} type="button" onClick={() => toggleTag(tag.id)}
+                      className="text-xs font-mono px-3 py-1.5 rounded-lg border transition-colors"
+                      style={active
+                        ? { background: "rgba(0,245,255,0.12)", border: "1px solid rgba(0,245,255,0.4)", color: "#00f5ff" }
+                        : { background: "rgba(0,245,255,0.03)", border: "1px solid rgba(0,245,255,0.1)", color: "#475569" }}>
+                      #{tag.name}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-[11px] font-mono text-text-muted">
+                No tags yet — create some in <a href="/admin/tags" className="text-neon-cyan hover:underline">Tags</a>.
+              </p>
+            )}
+          </div>
+
+          <div className="glass-panel p-5">
+            <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-3">Featured Image</label>
+
+            {featuredImage ? (
+              <div className="relative rounded-xl overflow-hidden mb-3 group">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={featuredImage} alt="Featured" className="w-full h-32 object-cover" />
+                <button type="button" onClick={() => setValue("featuredImage", "", { shouldDirty: true })}
+                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                  ×
+                </button>
+              </div>
+            ) : (
+              <label
+                htmlFor="edit-featured-image-input"
+                className="rounded-xl border-2 border-dashed border-neon-cyan/15 p-6 text-center hover:border-neon-cyan/30 transition-colors cursor-pointer block"
+              >
+                <ImageIcon className="w-8 h-8 text-text-muted mx-auto mb-2" />
+                <p className="text-xs font-mono text-text-muted">
+                  {uploadingImage ? "Uploading…" : "Click to upload an image"}
+                </p>
+                <p className="text-[10px] font-mono text-text-muted/60 mt-1">Recommended: 1200×630px · JPEG/PNG/WebP · max 5MB</p>
+              </label>
+            )}
+            <input
+              id="edit-featured-image-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              disabled={uploadingImage}
+              onChange={(e) => handleImageFile(e.target.files?.[0])}
+            />
+
+            <input
+              type="text"
+              placeholder="...or paste an image URL"
+              className="input-cyber w-full text-xs mt-2"
+              value={featuredImage ?? ""}
+              onChange={(e) => setValue("featuredImage", e.target.value, { shouldDirty: true })}
+            />
           </div>
 
           <div className="glass-panel p-5 space-y-4">

@@ -35,6 +35,74 @@ const STATUS_CONFIG: Record<CheckStatus, { icon: typeof CheckCircle2; color: str
 };
 
 export default function AdminSettingsPage() {
+  // ── Change Password ──────────────────────────────────────────────────────────
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword,     setNewPassword]     = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwSaving,        setPwSaving]        = useState(false);
+
+  async function handleChangePassword() {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error("Fill in all three password fields.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("New password and confirmation don't match.");
+      return;
+    }
+    setPwSaving(true);
+    try {
+      const res = await fetch("/api/admin/change-password", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? "Failed to change password.");
+      toast.success("Password updated. Other sessions have been signed out.");
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to change password.");
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
+  // ── Session Duration ─────────────────────────────────────────────────────────
+  const [sessionDuration, setSessionDuration] = useState("7d");
+  const [sdSaving, setSdSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/settings/session-duration")
+      .then((r) => r.json())
+      .then((d: { duration: string }) => setSessionDuration(d.duration))
+      .catch(() => {});
+  }, []);
+
+  async function handleSessionDurationChange(value: string) {
+    const previous = sessionDuration;
+    setSessionDuration(value);
+    setSdSaving(true);
+    try {
+      const res = await fetch("/api/admin/settings/session-duration", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ duration: value }),
+      });
+      if (!res.ok) throw new Error("Failed to save.");
+      toast.success("Session duration updated — applies to new sign-ins.");
+    } catch {
+      setSessionDuration(previous);
+      toast.error("Failed to save session duration.");
+    } finally {
+      setSdSaving(false);
+    }
+  }
+
   // ── Error Reveal System (original — uses context hook, not direct fetch) ─────
   const { errorRevealEnabled, isLoading: erLoading, setErrorRevealEnabled } = useErrorReveal();
   const [erSaving, setErSaving] = useState(false);
@@ -155,17 +223,22 @@ export default function AdminSettingsPage() {
           <div className="space-y-4">
             <div>
               <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-2">Current Password</label>
-              <input type="password" placeholder="••••••••••" className="input-cyber w-full" autoComplete="current-password" />
+              <input type="password" placeholder="••••••••••" className="input-cyber w-full" autoComplete="current-password"
+                value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
             </div>
             <div>
               <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-2">New Password</label>
-              <input type="password" placeholder="••••••••••" className="input-cyber w-full" autoComplete="new-password" />
+              <input type="password" placeholder="••••••••••" className="input-cyber w-full" autoComplete="new-password"
+                value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
             </div>
             <div>
               <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-2">Confirm New Password</label>
-              <input type="password" placeholder="••••••••••" className="input-cyber w-full" autoComplete="new-password" />
+              <input type="password" placeholder="••••••••••" className="input-cyber w-full" autoComplete="new-password"
+                value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
             </div>
-            <button className="btn-neon text-sm font-mono px-5 py-2.5">Update Password</button>
+            <button className="btn-neon text-sm font-mono px-5 py-2.5 disabled:opacity-50" onClick={handleChangePassword} disabled={pwSaving}>
+              {pwSaving ? "Updating…" : "Update Password"}
+            </button>
           </div>
         </div>
 
@@ -181,7 +254,9 @@ export default function AdminSettingsPage() {
                 <p className="text-xs font-mono text-text-primary">Session Duration</p>
                 <p className="text-[11px] font-mono text-text-muted">How long admin sessions stay active</p>
               </div>
-              <select className="input-cyber text-xs px-3 py-2 rounded-lg">
+              <select className="input-cyber text-xs px-3 py-2 rounded-lg disabled:opacity-50"
+                value={sessionDuration} disabled={sdSaving}
+                onChange={(e) => handleSessionDurationChange(e.target.value)}>
                 <option value="7d">7 days</option>
                 <option value="1d">24 hours</option>
                 <option value="12h">12 hours</option>

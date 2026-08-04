@@ -129,6 +129,6 @@ export async function GET() {
     checks,
     timestamp: new Date().toISOString(),
     provider:  "PostgreSQL (Supabase)",
-    prismaVersion: "5.x",
+    prismaVersion: "6.x",
   });
 }

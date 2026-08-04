@@ -8,14 +8,18 @@ async function main() {
   console.log("🌱 Seeding database...\n");
 
   // ── Seed admin ─────────────────────────────────────────────────
+  // Email/password are overridable via env vars; the fallback email must
+  // match what README.md / SETUP_AND_DEPLOYMENT.md / the login page tell
+  // people to use, or the documented login flow doesn't work.
+  const email = process.env.ADMIN_INITIAL_EMAIL ?? "admin@toolsbar.com";
   const password = process.env.ADMIN_INITIAL_PASSWORD ?? "ToolsBar@Admin2025";
   const hash = await bcrypt.hash(password, 12);
 
   const admin = await prisma.admin.upsert({
-    where: { email: "movieburststeam@gmail.com" },
+    where: { email },
     update: {},
     create: {
-      email: "movieburststeam@gmail.com",
+      email,
       name: "Admin",
       passwordHash: hash,
       role: "SUPER_ADMIN",
@@ -105,7 +109,7 @@ async function main() {
   }
 
   console.log("\n✅ Seed complete!");
-  console.log(`\n📋 Admin credentials:\n   Email:    movieburststeam@gmail.com\n   Password: ${password}`);
+  console.log(`\n📋 Admin credentials:\n   Email:    ${email}\n   Password: ${password}`);
 }
 
 main()

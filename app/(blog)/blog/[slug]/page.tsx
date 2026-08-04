@@ -215,7 +215,9 @@ export default async function BlogPostPage({
   // ── Try DB post first ────────────────────────────────────────────────────────
   const dbPost = await getPostBySlug(slug);
   if (dbPost) {
-    const relatedTool = TOOLS_CONFIG.find((t) => t.category === (dbPost.category?.slug?.replace("-tools", "") ?? ""));
+    const relatedTool = dbPost.relatedToolSlug
+      ? TOOLS_CONFIG.find((t) => t.slug === dbPost.relatedToolSlug)
+      : null;
     const articleSchema = {
       "@context": "https://schema.org", "@type": "Article",
       headline: dbPost.title, description: dbPost.excerpt,
@@ -224,9 +226,20 @@ export default async function BlogPostPage({
       publisher: { "@type": "Organization", name: "ToolsBar", url: "https://toolsbar.com" },
       url: `https://toolsbar.com/blog/${slug}`,
     };
+    const faqItems = (dbPost.faqSchema as { items?: { question: string; answer: string }[] } | null)?.items ?? [];
+    const faqLdSchema = faqItems.length > 0 ? {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: faqItems.map(({ question, answer }) => ({
+        "@type": "Question",
+        name: question,
+        acceptedAnswer: { "@type": "Answer", text: answer },
+      })),
+    } : null;
     return (
       <>
         <JsonLd data={articleSchema} />
+        {faqLdSchema && <JsonLd data={faqLdSchema} />}
         <div className="min-h-screen pt-20">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
             <Link href="/blog" className="inline-flex items-center gap-2 text-xs font-mono text-text-muted hover:text-neon-cyan transition-colors mb-8">
@@ -292,6 +305,19 @@ export default async function BlogPostPage({
                 <p className="text-xs font-mono text-neon-cyan/60 uppercase tracking-widest mb-4">{"// Try the Tool"}</p>
                 <ToolCard tool={relatedTool} />
               </div>
+            )}
+            {faqItems.length > 0 && (
+              <section className="mt-12">
+                <h2 className="font-display text-xl font-black text-white tracking-wider mb-6">FREQUENTLY ASKED QUESTIONS</h2>
+                <div className="space-y-4">
+                  {faqItems.map(({ question, answer }, i) => (
+                    <div key={i} className="glass-panel p-5">
+                      <h3 className="text-sm font-mono font-semibold text-text-primary mb-2">{question}</h3>
+                      <p className="text-xs text-text-muted font-mono leading-relaxed">{answer}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
             )}
           </div>
         </div>

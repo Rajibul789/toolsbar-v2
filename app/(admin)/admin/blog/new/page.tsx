@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Save, ArrowLeft, Image as ImageIcon, Plus, Trash2 } from "lucide-react";
@@ -27,11 +27,13 @@ const schema = z.object({
   seoDesc:     z.string().optional(),
   seoKeywords: z.string().optional(),
   relatedToolSlug: z.string().optional(),
+  featuredImage: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
 
-const BLOG_CATEGORIES = ["PDF Tools", "Image Tools", "Text Tools", "Social Tools", "Developer Tools", "Tutorials", "News"];
+interface CategoryOption { id: string; name: string; }
+interface TagOption { id: string; name: string; }
 
 interface FaqItem { question: string; answer: string; }
 
@@ -41,6 +43,24 @@ export default function NewBlogPostPage() {
   const [activeTab, setActiveTab] = useState<"content" | "seo" | "faq">("content");
   const [faqItems, setFaqItems] = useState<FaqItem[]>([{ question: "", answer: "" }]);
   const [isSaving, setIsSaving] = useState(false);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [tags, setTags] = useState<TagOption[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/categories")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: CategoryOption[]) => setCategories(data))
+      .catch(() => setCategories([]));
+    fetch("/api/admin/tags")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: TagOption[]) => setTags(data))
+      .catch(() => setTags([]));
+  }, []);
+
+  function toggleTag(id: string) {
+    setSelectedTagIds((p) => (p.includes(id) ? p.filter((t) => t !== id) : [...p, id]));
+  }
 
   const {
     register,
@@ -54,6 +74,26 @@ export default function NewBlogPostPage() {
   });
 
   const title = watch("title");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const featuredImage = watch("featuredImage");
+
+  async function handleImageFile(file: File | undefined) {
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/admin/blog/upload-image", { method: "POST", body: form });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? "Upload failed.");
+      setValue("featuredImage", body.url, { shouldDirty: true });
+      toast.success("Image uploaded.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
 
   function handleTitleChange(value: string) {
     setValue("title", value);
@@ -83,6 +123,7 @@ export default function NewBlogPostPage() {
       const payload = {
         ...data,
         content,
+        tagIds: selectedTagIds,
         faqSchema: faqItems.filter((f) => f.question && f.answer).length > 0
           ? { items: faqItems.filter((f) => f.question && f.answer) }
           : undefined,
@@ -260,21 +301,84 @@ export default function NewBlogPostPage() {
             <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-3">Category</label>
             <select {...register("categoryId")} className="input-cyber w-full text-sm">
               <option value="">Select category</option>
-              {BLOG_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat.toLowerCase().replace(/\s+/g, "-")}>{cat}</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
+            {categories.length === 0 && (
+              <p className="text-[11px] font-mono text-text-muted mt-1">
+                No categories yet — create one in <a href="/admin/categories" className="text-neon-cyan hover:underline">Categories</a> first.
+              </p>
+            )}
             {errors.categoryId && <p className="text-[11px] font-mono text-neon-red mt-1">{errors.categoryId.message}</p>}
+          </div>
+
+          {/* Tags */}
+          <div className="glass-panel p-5">
+            <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-3">Tags</label>
+            {tags.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => {
+                  const active = selectedTagIds.includes(tag.id);
+                  return (
+                    <button key={tag.id} type="button" onClick={() => toggleTag(tag.id)}
+                      className="text-xs font-mono px-3 py-1.5 rounded-lg border transition-colors"
+                      style={active
+                        ? { background: "rgba(0,245,255,0.12)", border: "1px solid rgba(0,245,255,0.4)", color: "#00f5ff" }
+                        : { background: "rgba(0,245,255,0.03)", border: "1px solid rgba(0,245,255,0.1)", color: "#475569" }}>
+                      #{tag.name}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-[11px] font-mono text-text-muted">
+                No tags yet — create some in <a href="/admin/tags" className="text-neon-cyan hover:underline">Tags</a>.
+              </p>
+            )}
           </div>
 
           {/* Featured image */}
           <div className="glass-panel p-5">
             <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-3">Featured Image</label>
-            <div className="rounded-xl border-2 border-dashed border-neon-cyan/15 p-6 text-center hover:border-neon-cyan/30 transition-colors cursor-pointer">
-              <ImageIcon className="w-8 h-8 text-text-muted mx-auto mb-2" />
-              <p className="text-xs font-mono text-text-muted">Upload image or paste URL</p>
-              <p className="text-[10px] font-mono text-text-muted/60 mt-1">Recommended: 1200×630px</p>
-            </div>
+
+            {featuredImage ? (
+              <div className="relative rounded-xl overflow-hidden mb-3 group">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={featuredImage} alt="Featured" className="w-full h-32 object-cover" />
+                <button type="button" onClick={() => setValue("featuredImage", "", { shouldDirty: true })}
+                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                  ×
+                </button>
+              </div>
+            ) : (
+              <label
+                htmlFor="featured-image-input"
+                className="rounded-xl border-2 border-dashed border-neon-cyan/15 p-6 text-center hover:border-neon-cyan/30 transition-colors cursor-pointer block"
+              >
+                <ImageIcon className="w-8 h-8 text-text-muted mx-auto mb-2" />
+                <p className="text-xs font-mono text-text-muted">
+                  {uploadingImage ? "Uploading…" : "Click to upload an image"}
+                </p>
+                <p className="text-[10px] font-mono text-text-muted/60 mt-1">Recommended: 1200×630px · JPEG/PNG/WebP · max 5MB</p>
+              </label>
+            )}
+            <input
+              id="featured-image-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              disabled={uploadingImage}
+              onChange={(e) => handleImageFile(e.target.files?.[0])}
+            />
+
+            <input
+              type="text"
+              placeholder="...or paste an image URL"
+              className="input-cyber w-full text-xs mt-2"
+              value={featuredImage ?? ""}
+              onChange={(e) => setValue("featuredImage", e.target.value, { shouldDirty: true })}
+            />
           </div>
 
           {/* Checklist */}

@@ -70,8 +70,8 @@ const config: Config = {
       },
 
       fontFamily: {
-        display: ["var(--font-orbitron)", "monospace"],
-        mono:    ["var(--font-jetbrains)", "monospace"],
+        display: ["var(--font-display)", "monospace"],
+        mono:    ["var(--font-mono)", "monospace"],
         body:    ["var(--font-inter)", "sans-serif"],
         sans:    ["var(--font-inter)", "sans-serif"],
       },

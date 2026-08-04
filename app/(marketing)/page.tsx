@@ -9,6 +9,9 @@ import { BlogPreviewSection }  from "@/components/home/BlogPreviewSection";
 import { RecentlyUsedSection } from "@/components/home/RecentlyUsedSection";
 import { JsonLd }              from "@/components/seo/JsonLd";
 import { getFeaturedTools }    from "@/lib/data/tools";
+import { getHomepageConfig }   from "@/lib/data/homepage";
+import { getPublishedPosts }   from "@/lib/data/blog";
+import { getSeoSettings }      from "@/lib/data/seo";
 
 export const metadata: Metadata = {
   title: "ToolsBar – Free Online PDF, Image & Developer Tools",
@@ -30,20 +33,25 @@ const websiteSchema = {
   },
 };
 
-const orgSchema = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  name: "ToolsBar",
-  url: "https://toolsbar.com",
-  logo: "https://toolsbar.com/icons/icon-192.png",
-  contactPoint: { "@type": "ContactPoint", contactType: "customer support", email: "hello@toolsbar.com" },
-};
-
-// Server component — fetches DB-backed featured tools so admin changes reflect
-// without redeployment. revalidateTag("featured-tools") is called by the admin
-// tools API route on every mutation.
+// Server component — fetches DB-backed featured tools, homepage config, and
+// blog posts so admin changes (Tools, Homepage Builder, Blog) reflect without
+// redeployment. Each admin route calls revalidateTag/revalidatePath on save.
 export default async function HomePage() {
-  const featuredTools = await getFeaturedTools();
+  const [featuredTools, homepage, blogData, seo] = await Promise.all([
+    getFeaturedTools(),
+    getHomepageConfig(),
+    getPublishedPosts({ limit: 3 }),
+    getSeoSettings(),
+  ]);
+
+  const orgSchema = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: seo.orgName,
+    url: seo.orgUrl,
+    logo: "https://toolsbar.com/icons/icon-192.png",
+    contactPoint: { "@type": "ContactPoint", contactType: "customer support", email: seo.orgEmail },
+  };
 
   return (
     <>
@@ -51,28 +59,30 @@ export default async function HomePage() {
       <JsonLd data={orgSchema} />
 
       {/* 1. Full-screen hero with Matrix Rain + search */}
-      <HeroSection />
+      {homepage.showHero && (
+        <HeroSection headline={homepage.heroHeadline} typewriterLines={homepage.typewriterLines} />
+      )}
 
       {/* 2. Recently used tools — client-only, from Zustand/localStorage */}
-      <RecentlyUsedSection />
+      {homepage.showRecentlyUsed && <RecentlyUsedSection />}
 
       {/* 3. Netflix-style featured tools carousel — DB-backed */}
-      <FeaturedToolsSlider serverTools={featuredTools} />
+      {homepage.showFeatured && <FeaturedToolsSlider serverTools={featuredTools} />}
 
       {/* 4. Popular Tools — highlighted with usage badges */}
       <PopularToolsSection />
 
       {/* 5. All tools by category */}
-      <ToolsGrid />
+      {homepage.showToolsGrid && <ToolsGrid />}
 
       {/* 6. Why ToolsBar feature highlights */}
-      <WhyChooseUs />
+      {homepage.showWhyUs && <WhyChooseUs />}
 
       {/* 7. FAQ accordion */}
-      <FAQSection />
+      {homepage.showFaq && <FAQSection />}
 
       {/* 8. Latest blog articles */}
-      <BlogPreviewSection />
+      {homepage.showBlogPreview && <BlogPreviewSection posts={blogData.posts} />}
     </>
   );
 }
