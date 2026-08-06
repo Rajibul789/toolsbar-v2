@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,6 +12,7 @@ export function ToolsDirectoryClient() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [results, setResults] = useState(searchTools(query));
+  const urlSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const q = searchParams.get("q") ?? "";
@@ -20,14 +21,33 @@ export function ToolsDirectoryClient() {
   }, [searchParams]);
 
   function handleChange(value: string) {
+    // Keep typing instant: input value and filtered results update
+    // immediately, on every keystroke.
     setQuery(value);
     setResults(searchTools(value));
-    const url = value.trim() ? `/tools?q=${encodeURIComponent(value)}` : "/tools";
-    router.replace(url, { scroll: false });
+
+    // router.replace() is a real Next.js navigation, not a cheap state
+    // update — calling it on every keystroke (previously: no debounce)
+    // is what made typing here feel laggy. Sync the shareable ?q= URL
+    // only after the user pauses.
+    if (urlSyncTimer.current) clearTimeout(urlSyncTimer.current);
+    urlSyncTimer.current = setTimeout(() => {
+      const url = value.trim() ? `/tools?q=${encodeURIComponent(value)}` : "/tools";
+      router.replace(url, { scroll: false });
+    }, 400);
   }
 
+  useEffect(() => {
+    return () => {
+      if (urlSyncTimer.current) clearTimeout(urlSyncTimer.current);
+    };
+  }, []);
+
   function clear() {
-    handleChange("");
+    setQuery("");
+    setResults(searchTools(""));
+    if (urlSyncTimer.current) clearTimeout(urlSyncTimer.current);
+    router.replace("/tools", { scroll: false });
   }
 
   const isSearching = query.trim().length > 0;

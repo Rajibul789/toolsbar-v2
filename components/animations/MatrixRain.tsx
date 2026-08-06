@@ -39,6 +39,18 @@ export function MatrixRain({
       return `rgba(${r},${g},${b},${a})`;
     }
 
+    // Precompute every fillStyle string the draw loop can possibly use, once,
+    // instead of re-parsing the same hex colour and re-building the same
+    // template string for every one of ~130+ characters, every frame, at
+    // 60fps. The colour choice per character is still random each frame —
+    // only the string-building work is hoisted out.
+    const leadStyle = `rgba(255,255,255,${opacity * 3.5})`;
+    const tailStyleA = color.startsWith("#")
+      ? hexToRgba(color, opacity * 1.8)
+      : color.replace(")", `,${opacity * 1.8})`).replace("rgb", "rgba");
+    const tailStyleB = hexToRgba("#00ff88", opacity * 1.8);
+    const fontString = `${fontSize}px "JetBrains Mono", monospace`;
+
     // ── Resize (debounced via ResizeObserver) ────────────────────
     let resizeTimer: ReturnType<typeof setTimeout>;
     function resize() {
@@ -47,6 +59,7 @@ export function MatrixRain({
       canvas.height = canvas.offsetHeight;
       cols  = Math.floor(canvas.width / fontSize);
       drops = Array.from({ length: cols }, () => Math.random() * -50);
+      ctx.font = fontString; // canvas 2D state resets when width/height change
     }
 
     function debouncedResize() {
@@ -72,20 +85,15 @@ export function MatrixRain({
       ctx.fillStyle = "rgba(1,6,16,0.055)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.font = `${fontSize}px "JetBrains Mono", monospace`;
-
       for (let i = 0; i < drops.length; i++) {
         const char = CHARS[Math.floor(Math.random() * CHARS.length)];
         const y = drops[i] * fontSize;
 
         // Alternate lead (bright white flash) / tail (neon colour)
         if (Math.random() > 0.92) {
-          ctx.fillStyle = `rgba(255,255,255,${opacity * 3.5})`;
+          ctx.fillStyle = leadStyle;
         } else {
-          const tailColor = Math.random() > 0.5 ? color : "#00ff88";
-          ctx.fillStyle = tailColor.startsWith("#")
-            ? hexToRgba(tailColor, opacity * 1.8)
-            : tailColor.replace(")", `,${opacity * 1.8})`).replace("rgb", "rgba");
+          ctx.fillStyle = Math.random() > 0.5 ? tailStyleA : tailStyleB;
         }
 
         ctx.fillText(char, i * fontSize, y);

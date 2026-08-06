@@ -49,18 +49,26 @@ export function CursorEffect() {
   useEffect(() => {
     if (!isHoverDevice) return;
 
+    let lastTarget: EventTarget | null = null;
+
     function onMove(e: MouseEvent) {
       cursorX.set(e.clientX);
       cursorY.set(e.clientY);
       setIsVisible(true);
 
-      const target = e.target as HTMLElement;
-      const cursor = getComputedStyle(target).cursor;
-      setIsPointer(
-        cursor === "pointer" ||
-        target.tagName === "A" ||
-        target.tagName === "BUTTON"
-      );
+      // getComputedStyle() can force a style recalculation — expensive to
+      // call on every mousemove (which can fire 60-120+ times/sec). Only
+      // recompute pointer state when the hovered element actually changes.
+      if (e.target !== lastTarget) {
+        lastTarget = e.target;
+        const target = e.target as HTMLElement;
+        const cursor = getComputedStyle(target).cursor;
+        setIsPointer(
+          cursor === "pointer" ||
+          target.tagName === "A" ||
+          target.tagName === "BUTTON"
+        );
+      }
     }
 
     function onLeave() { setIsVisible(false); }
