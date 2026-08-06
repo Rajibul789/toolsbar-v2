@@ -53,10 +53,14 @@ export async function POST(req: NextRequest) {
     const { url } = parsed.data;
     const workerUrl = SITE_CONFIG.services.urlShortener;
 
+    // Field name confirmed from the working reference implementation
+    // (link-tools.js): the Worker expects `originalURL`, not `url`. Sending
+    // the wrong field name was the actual root cause — the Worker never saw
+    // a URL to shorten, so it responded with an error status every time.
     const response = await fetch(workerUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ originalURL: url }),
       signal: AbortSignal.timeout(10_000),
     });
 
@@ -71,7 +75,14 @@ export async function POST(req: NextRequest) {
       await logApiError(new Error(`Worker responded ${response.status}: ${raw.slice(0, 300)}`), {
         route: "/api/url-shorten", toolSlug: "url-shortener",
       });
-      return NextResponse.json({ error: "Shortening service unavailable" }, { status: 502 });
+      // Surface the Worker's own error message when it provides one
+      // (matches the reference implementation's `data.error || fallback`),
+      // instead of always showing a generic message.
+      const workerMessage = extractErrorMessage(raw);
+      return NextResponse.json(
+        { error: workerMessage ?? "Shortening service unavailable" },
+        { status: 502 }
+      );
     }
 
     const short = extractShortUrl(raw);
@@ -96,12 +107,25 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/** Pull a Worker-provided error message out of a non-2xx JSON response, if present. */
+function extractErrorMessage(raw: string): string | null {
+  try {
+    const json = JSON.parse(raw.trim());
+    return typeof json?.error === "string" && json.error.trim() ? json.error : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Pull a short URL out of a Cloudflare Worker response, whatever shape it's
- * in. Tries, in order:
- *   1. JSON with one of the common field names a URL-shortener Worker uses
- *   2. The raw body itself, if it's already a bare URL (plain-text Workers)
- * Returns null if nothing usable was found.
+ * Pull the short URL out of the Worker's JSON response.
+ *
+ * `shortURL` is the field name confirmed from the working reference
+ * implementation (link-tools.js) — this is not a guess. The couple of
+ * alternate names below are kept only as a safety net in case the Worker's
+ * contract ever changes; if none of them match, extractShortUrl() returns
+ * null and the caller logs the raw response so a future mismatch is
+ * immediately visible instead of silently failing again.
  */
 function extractShortUrl(raw: string): string | null {
   const trimmed = raw.trim();
@@ -110,20 +134,15 @@ function extractShortUrl(raw: string): string | null {
   try {
     const json = JSON.parse(trimmed);
     if (json && typeof json === "object") {
-      const candidate =
-        json.short ?? json.shortUrl ?? json.short_url ??
-        json.shortenedUrl ?? json.url ?? json.result ?? json.link;
+      const candidate = json.shortURL ?? json.shortUrl ?? json.short_url;
       if (typeof candidate === "string" && /^https?:\/\//i.test(candidate)) {
         return candidate;
       }
     }
   } catch {
-    // Not JSON — fall through to plain-text handling below.
-  }
-
-  // Plain-text Worker: the whole body is the short link itself.
-  if (/^https?:\/\/\S+$/i.test(trimmed)) {
-    return trimmed;
+    // Not JSON. The confirmed Worker contract always returns JSON, so this
+    // means something upstream (Cloudflare edge error page, etc.) sent back
+    // something else — fall through and let the caller log the raw body.
   }
 
   return null;
