@@ -1,9 +1,31 @@
+/**
+ * Resolves the site's real, currently-deployed URL.
+ *
+ * The previous hardcoded fallback ("https://toolsbar.com") pointed at a
+ * domain the project isn't actually deployed to — the real deployment is
+ * on a *.vercel.app URL. Every relative asset path in metadata (og:image,
+ * etc.) gets resolved against this value, so a wrong base here silently
+ * breaks link previews on every page, not just the ones referencing it
+ * directly — confirmed via a real WhatsApp share showing no image.
+ *
+ * Priority: an explicit NEXT_PUBLIC_SITE_URL always wins (set this once a
+ * real custom domain exists) → Vercel's own automatically-provided
+ * production URL → Vercel's per-deployment URL (covers preview
+ * deployments too) → hardcoded fallback, only reached outside Vercel.
+ */
+function resolveSiteUrl(): string {
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "https://toolsbar.com";
+}
+
 export const SITE_CONFIG = {
   name: "ToolsBar",
   tagline: "Free Online Tools — Engineered for Precision",
   description:
     "15+ free, privacy-first online tools for PDF, images, documents, and developers. All processing happens in your browser — no uploads, no signups.",
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://toolsbar.com",
+  url: resolveSiteUrl(),
   ogImage: "/images/og-image.jpg",
 
   social: {

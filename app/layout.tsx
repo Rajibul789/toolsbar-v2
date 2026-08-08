@@ -11,6 +11,7 @@ import { ErrorBoundary }       from "@/lib/errors/error-boundary";
 import { getMaintenanceMode }  from "@/lib/data/settings";
 import { MaintenancePage }     from "@/components/maintenance/MaintenancePage";
 import { getSeoSettings }      from "@/lib/data/seo";
+import { SITE_CONFIG }         from "@/config/site.config";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -21,7 +22,7 @@ const inter = Inter({
 export async function generateMetadata(): Promise<Metadata> {
   const seo = await getSeoSettings();
   return {
-    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://toolsbar.com"),
+    metadataBase: new URL(SITE_CONFIG.url),
     title: {
       template: `%s | ${seo.ogSiteName} – Free Online Tools`,
       default:  seo.siteTitle,
@@ -40,7 +41,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     openGraph: {
       type: "website", locale: "en_US",
-      url: "https://toolsbar.com", siteName: seo.ogSiteName,
+      url: SITE_CONFIG.url, siteName: seo.ogSiteName,
       title: seo.siteTitle,
       description: seo.siteDescription,
       images: [{ url: seo.ogImageUrl, width: 1200, height: 630, alt: seo.ogSiteName }],

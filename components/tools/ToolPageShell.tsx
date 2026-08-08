@@ -12,6 +12,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useToolsStore } from "@/stores/toolsStore";
 import { toast } from "sonner";
 import { Heart, Share2 } from "lucide-react";
+import { SITE_CONFIG } from "@/config/site.config";
 
 function getLucideIcon(name: string) {
   const icons = LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>>;
@@ -64,7 +65,7 @@ export function ToolPageShell({ tool, children }: ToolPageShellProps) {
     description: tool.longDesc ?? tool.shortDesc,
     applicationCategory: "UtilitiesApplication",
     operatingSystem: "Web Browser",
-    url: `https://toolsbar.com/tools/${tool.slug}`,
+    url: `${SITE_CONFIG.url}/tools/${tool.slug}`,
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     featureList: tool.howItWorks,
   };
@@ -73,9 +74,9 @@ export function ToolPageShell({ tool, children }: ToolPageShellProps) {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home",  item: "https://toolsbar.com" },
-      { "@type": "ListItem", position: 2, name: "Tools", item: "https://toolsbar.com/tools" },
-      { "@type": "ListItem", position: 3, name: tool.name, item: `https://toolsbar.com/tools/${tool.slug}` },
+      { "@type": "ListItem", position: 1, name: "Home",  item: SITE_CONFIG.url },
+      { "@type": "ListItem", position: 2, name: "Tools", item: `${SITE_CONFIG.url}/tools` },
+      { "@type": "ListItem", position: 3, name: tool.name, item: `${SITE_CONFIG.url}/tools/${tool.slug}` },
     ],
   };
 

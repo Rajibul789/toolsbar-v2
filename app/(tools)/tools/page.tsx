@@ -7,6 +7,7 @@ import { ToolsDirectoryClient } from "@/components/tools/ToolsDirectoryClient";
 import * as LucideIcons from "lucide-react";
 import Link from "next/link";
 import { NEON_COLOR_MAP } from "@/config/tools.config";
+import { SITE_CONFIG } from "@/config/site.config";
 
 export const metadata: Metadata = {
   title: "All Free Online Tools | ToolsBar",
@@ -26,7 +27,7 @@ const listSchema = {
     position: i + 1,
     name: tool.name,
     description: tool.shortDesc,
-    url: `https://toolsbar.com/tools/${tool.slug}`,
+    url: `${SITE_CONFIG.url}/tools/${tool.slug}`,
   })),
 };
 

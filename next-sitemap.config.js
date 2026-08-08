@@ -25,7 +25,7 @@ const PATH_CONFIG = {
 };
 
 module.exports = {
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://toolsbar.com",
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) || (process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`) || "https://toolsbar.com",
   generateRobotsTxt: false, // managed manually
   generateIndexSitemap: true,
   changefreq: "weekly",

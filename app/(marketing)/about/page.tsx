@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Shield, Zap, Lock, Globe, Code2, Users } from "lucide-react";
 import { JsonLd } from "@/components/seo/JsonLd";
+import { SITE_CONFIG } from "@/config/site.config";
 
 export const metadata: Metadata = {
   title: "About ToolsBar – Free Browser-Based Online Tools",
@@ -22,7 +23,7 @@ const orgSchema = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "ToolsBar",
-  url: "https://toolsbar.com",
+  url: SITE_CONFIG.url,
   description: "Free, privacy-first online tools platform.",
   foundingDate: "2024",
   email: "hello@toolsbar.com",

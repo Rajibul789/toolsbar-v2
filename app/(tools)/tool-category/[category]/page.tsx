@@ -11,6 +11,7 @@ import {
 } from "@/config/tools.config";
 import { ToolCard } from "@/components/tools/ToolCard";
 import { JsonLd } from "@/components/seo/JsonLd";
+import { SITE_CONFIG } from "@/config/site.config";
 
 function getLucideIcon(name: string) {
   const icons = LucideIcons as unknown as Record<
@@ -65,7 +66,7 @@ export default async function ToolCategoryPage({
       "@type": "ListItem",
       position: i + 1,
       name: t.name,
-      url: `https://toolsbar.com/tools/${t.slug}`,
+      url: `${SITE_CONFIG.url}/tools/${t.slug}`,
     })),
   };
 

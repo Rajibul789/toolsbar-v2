@@ -12,6 +12,7 @@ import { getFeaturedTools }    from "@/lib/data/tools";
 import { getHomepageConfig }   from "@/lib/data/homepage";
 import { getPublishedPosts }   from "@/lib/data/blog";
 import { getSeoSettings }      from "@/lib/data/seo";
+import { SITE_CONFIG }         from "@/config/site.config";
 
 export const metadata: Metadata = {
   title: "ToolsBar – Free Online PDF, Image & Developer Tools",
@@ -24,11 +25,11 @@ const websiteSchema = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: "ToolsBar",
-  url: "https://toolsbar.com",
+  url: SITE_CONFIG.url,
   description: "Free online tools for PDF, images, text conversion, and developers.",
   potentialAction: {
     "@type": "SearchAction",
-    target: { "@type": "EntryPoint", urlTemplate: "https://toolsbar.com/tools?q={search_term_string}" },
+    target: { "@type": "EntryPoint", urlTemplate: `${SITE_CONFIG.url}/tools?q={search_term_string}` },
     "query-input": "required name=search_term_string",
   },
 };
@@ -49,7 +50,7 @@ export default async function HomePage() {
     "@type": "Organization",
     name: seo.orgName,
     url: seo.orgUrl,
-    logo: "https://toolsbar.com/icons/icon-192.png",
+    logo: `${SITE_CONFIG.url}/icons/icon-192.png`,
     contactPoint: { "@type": "ContactPoint", contactType: "customer support", email: seo.orgEmail },
   };
 

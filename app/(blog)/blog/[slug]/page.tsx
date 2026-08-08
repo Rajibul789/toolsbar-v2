@@ -8,6 +8,7 @@ import { JsonLd } from "@/components/seo/JsonLd";
 import { TOOLS_CONFIG } from "@/config/tools.config";
 import { ToolCard } from "@/components/tools/ToolCard";
 import { getPostBySlug } from "@/lib/data/blog";
+import { SITE_CONFIG } from "@/config/site.config";
 
 // ── Static post data — used as fallback when the DB has no entry for the slug ──
 // In production add real posts via the admin blog editor; they'll take precedence.
@@ -243,8 +244,8 @@ export default async function BlogPostPage({
       headline: dbPost.title, description: dbPost.excerpt,
       datePublished: dbPost.publishedAt?.toISOString(),
       author: { "@type": "Organization", name: dbPost.author?.name ?? "ToolsBar Team" },
-      publisher: { "@type": "Organization", name: "ToolsBar", url: "https://toolsbar.com" },
-      url: `https://toolsbar.com/blog/${slug}`,
+      publisher: { "@type": "Organization", name: "ToolsBar", url: SITE_CONFIG.url },
+      url: `${SITE_CONFIG.url}/blog/${slug}`,
     };
     const faqItems = (dbPost.faqSchema as { items?: { question: string; answer: string }[] } | null)?.items ?? [];
     const faqLdSchema = faqItems.length > 0 ? {
@@ -360,8 +361,8 @@ export default async function BlogPostPage({
     description: post.excerpt,
     datePublished: post.date,
     author: { "@type": "Organization", name: "ToolsBar Team" },
-    publisher: { "@type": "Organization", name: "ToolsBar", url: "https://toolsbar.com" },
-    url: `https://toolsbar.com/blog/${post.slug}`,
+    publisher: { "@type": "Organization", name: "ToolsBar", url: SITE_CONFIG.url },
+    url: `${SITE_CONFIG.url}/blog/${post.slug}`,
   };
 
   const faqSchema = post.faq.length > 0 ? {
