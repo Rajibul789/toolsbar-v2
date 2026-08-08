@@ -13,6 +13,7 @@
 import { unstable_cache } from "next/cache";
 import prisma from "@/lib/db";
 import { CACHE_TAGS } from "./tools";
+import { SITE_CONFIG } from "@/config/site.config";
 
 export interface SeoSettings {
   siteTitle: string;
@@ -41,7 +42,7 @@ export const DEFAULT_SEO_SETTINGS: SeoSettings = {
   bingVerification: "",
   googleAnalyticsId: "",
   orgName: "ToolsBar",
-  orgUrl: "https://toolsbar.com",
+  orgUrl: SITE_CONFIG.url,
   orgEmail: "hello@toolsbar.com",
 };
 
