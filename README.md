@@ -235,5 +235,3 @@ No other changes needed. The tool appears automatically in navigation and search
 ## License
 
 MIT © ToolsBar
-
-## NEW

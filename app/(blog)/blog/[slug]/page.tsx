@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, ResolvingMetadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Calendar, Clock, ChevronRight, Tag, ArrowLeft } from "lucide-react";
@@ -176,12 +176,22 @@ export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
+}, parent: ResolvingMetadata): Promise<Metadata> {
   const { slug } = await params;
+
+  // openGraph/twitter are shallow-merged PER TOP-LEVEL FIELD, not deep-merged —
+  // if this function returns its own `openGraph` object without `images`, it
+  // completely replaces the root layout's (which has the site default image),
+  // leaving posts with no preview image at all when shared. Preserve it
+  // explicitly, and prefer the post's own featured image when it has one.
+  const previousImages = (await parent).openGraph?.images ?? [];
 
   // Try DB post first
   const dbPost = await getPostBySlug(slug);
   if (dbPost) {
+    const images = dbPost.featuredImage
+      ? [{ url: dbPost.featuredImage, width: 1200, height: 630, alt: dbPost.title }]
+      : previousImages;
     return {
       title: `${dbPost.title} | ToolsBar Blog`,
       description: dbPost.excerpt,
@@ -190,18 +200,28 @@ export async function generateMetadata({
         title: dbPost.title, description: dbPost.excerpt, type: "article",
         publishedTime: dbPost.publishedAt?.toISOString(),
         authors: [dbPost.author?.name ?? "ToolsBar Team"],
+        images,
+      },
+      twitter: {
+        card: "summary_large_image", title: dbPost.title, description: dbPost.excerpt,
+        images: dbPost.featuredImage ? [dbPost.featuredImage] : undefined,
       },
     };
   }
 
-  // Fall back to static post
+  // Fall back to static post — these don't carry their own image, so just
+  // preserve the site default rather than dropping it.
   const post = BLOG_POSTS.find((p) => p.slug === slug);
   if (!post) return {};
   return {
     title: `${post.title} | ToolsBar Blog`,
     description: post.excerpt,
     alternates: { canonical: `/blog/${slug}` },
-    openGraph: { title: post.title, description: post.excerpt, type: "article", publishedTime: post.date, authors: [post.author] },
+    openGraph: {
+      title: post.title, description: post.excerpt, type: "article",
+      publishedTime: post.date, authors: [post.author],
+      images: previousImages,
+    },
   };
 }
 

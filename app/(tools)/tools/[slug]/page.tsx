@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import type { Metadata } from "next";
+import type { Metadata, ResolvingMetadata } from "next";
 import dynamic from "next/dynamic";
 import { getToolBySlug, TOOLS_CONFIG } from "@/config/tools.config";
 import { ToolPageShell } from "@/components/tools/ToolPageShell";
@@ -50,7 +50,7 @@ export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
+}, parent: ResolvingMetadata): Promise<Metadata> {
   const { slug } = await params;
   const tool = getToolBySlug(slug);
   if (!tool) return {};
@@ -58,13 +58,21 @@ export async function generateMetadata({
   const title       = `${tool.name} – Free Online Tool | ToolsBar`;
   const description = `${tool.shortDesc} Free, browser-based — no file uploads, no account required.`;
 
+  // Same shallow-merge issue as the blog post page: without explicitly
+  // preserving these, every tool page's openGraph/twitter would replace the
+  // root layout's (which has the site default image) with one that has none.
+  const previousOgImages = (await parent).openGraph?.images ?? [];
+  const previousTwitterImages = (await parent).twitter && "images" in (await parent).twitter!
+    ? (await parent).twitter!.images
+    : undefined;
+
   return {
     title,
     description,
     keywords: tool.keywords.join(", "),
     alternates: { canonical: `/tools/${slug}` },
-    openGraph: { title, description, type: "website", url: `/tools/${slug}` },
-    twitter:   { card: "summary", title, description },
+    openGraph: { title, description, type: "website", url: `/tools/${slug}`, images: previousOgImages },
+    twitter:   { card: "summary", title, description, images: previousTwitterImages },
   };
 }
 
