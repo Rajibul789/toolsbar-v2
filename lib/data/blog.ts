@@ -8,6 +8,36 @@
 import { unstable_cache } from "next/cache";
 import prisma from "@/lib/db";
 import { CACHE_TAGS } from "./tools";
+import { slugify } from "@/lib/utils";
+import { PostStatus, type Prisma } from "@prisma/client";
+
+/**
+ * A post counts as publicly visible if it's explicitly PUBLISHED, or if
+ * it's SCHEDULED and its scheduled time has already passed. Previously this
+ * only ever checked status === "PUBLISHED", so SCHEDULED posts never went
+ * live automatically — nothing transitioned them. This check runs fresh on
+ * every (cached, 60s) query, so no cron job is needed: a scheduled post
+ * simply starts matching once `publishedAt` is in the past.
+ *
+ * The explicit `Prisma.BlogPostWhereInput` return type is load-bearing, not
+ * decoration: without it, "PUBLISHED"/"SCHEDULED" widen to plain `string`
+ * (TypeScript has no reason to narrow them to the literal type otherwise),
+ * which doesn't satisfy Prisma's PostStatus-typed `status` field. That
+ * mismatch was silent wherever this got assigned into a loosely-typed
+ * intermediate variable, but broke type inference at every call site that
+ * passed it straight into a Prisma `where:` argument — and from there,
+ * cascaded into getPostBySlug's return type losing its `include`d relations
+ * entirely, which is why `.author`/`.category`/`.tags` stopped resolving in
+ * the blog post page despite the schema and query being correct all along.
+ */
+function visibilityFilter(): Prisma.BlogPostWhereInput {
+  return {
+    OR: [
+      { status: PostStatus.PUBLISHED },
+      { status: PostStatus.SCHEDULED, publishedAt: { lte: new Date() } },
+    ],
+  };
+}
 
 export interface PublicBlogPost {
   id:            string;
@@ -76,7 +106,7 @@ export const getPublishedPosts = unstable_cache(
     const { page = 1, limit = 12, categorySlug, tagSlug } = opts;
 
     try {
-      const where: Record<string, unknown> = { status: "PUBLISHED" };
+      const where: Prisma.BlogPostWhereInput = { ...visibilityFilter() };
       if (categorySlug) where.category = { slug: categorySlug };
       if (tagSlug) where.tags = { some: { tag: { slug: tagSlug } } };
 
@@ -96,14 +126,7 @@ export const getPublishedPosts = unstable_cache(
         prisma.blogPost.count({ where }),
       ]);
 
-      type RawPost = {
-        id: string; slug: string; title: string; excerpt: string;
-        featuredImage: string | null; publishedAt: Date | null; content: string;
-        category: { name: string; slug: string } | null;
-        tags: Array<{ tag: { name: string; slug: string } }>;
-      };
-
-      const posts: PublicBlogPost[] = (raw as RawPost[]).map((p) => ({
+      const posts: PublicBlogPost[] = raw.map((p) => ({
         id:            p.id,
         slug:          p.slug,
         title:         p.title,
@@ -154,12 +177,12 @@ export const getFeaturedPostSlugs = unstable_cache(
   { tags: [CACHE_TAGS.blogPosts], revalidate: 60 }
 );
 
-/** Fetch a single published blog post by slug */
+/** Fetch a single published (or now-due scheduled) blog post by slug */
 export const getPostBySlug = unstable_cache(
   async (slug: string) => {
     try {
       return await prisma.blogPost.findFirst({
-        where: { slug, status: "PUBLISHED" },
+        where: { slug, ...visibilityFilter() },
         include: {
           author:   { select: { name: true } },
           category: { select: { name: true, slug: true } },
@@ -171,6 +194,100 @@ export const getPostBySlug = unstable_cache(
     }
   },
   ["post-by-slug"],
+  { tags: [CACHE_TAGS.blogPosts], revalidate: 60 }
+);
+
+/**
+ * Fetch up to `limit` other posts related to the given one — same category
+ * preferred, most recent first, current post always excluded. Falls back to
+ * "most recent posts overall" if the post has no category or nothing else
+ * matches, so a related-posts section is never just empty by default.
+ */
+export const getRelatedPosts = unstable_cache(
+  async (postId: string, categorySlug: string | null, limit = 3): Promise<PublicBlogPost[]> => {
+    try {
+      const baseWhere = { ...visibilityFilter(), id: { not: postId } };
+      const select = {
+        id: true, slug: true, title: true, excerpt: true,
+        featuredImage: true, publishedAt: true, content: true,
+        category: { select: { name: true, slug: true } },
+        tags:     { select: { tag: { select: { name: true, slug: true } } } },
+      };
+
+      let raw = categorySlug
+        ? await prisma.blogPost.findMany({
+            where: { ...baseWhere, category: { slug: categorySlug } },
+            orderBy: { publishedAt: "desc" },
+            take: limit,
+            select,
+          })
+        : [];
+
+      // Not enough same-category posts (or none) — top up with the most
+      // recent posts overall, excluding whatever we already picked.
+      if (raw.length < limit) {
+        const excludeIds = raw.map((p) => p.id).concat(postId);
+        const filler = await prisma.blogPost.findMany({
+          where: { ...visibilityFilter(), id: { notIn: excludeIds } },
+          orderBy: { publishedAt: "desc" },
+          take: limit - raw.length,
+          select,
+        });
+        raw = [...raw, ...filler];
+      }
+
+      return raw.map((p) => ({
+        id: p.id, slug: p.slug, title: p.title, excerpt: p.excerpt,
+        featuredImage: p.featuredImage, publishedAt: p.publishedAt,
+        readTimeMin: estimateReadTime(p.content),
+        category: p.category, tags: p.tags.map((t) => t.tag),
+      }));
+    } catch {
+      return [];
+    }
+  },
+  ["related-posts"],
+  { tags: [CACHE_TAGS.blogPosts], revalidate: 60 }
+);
+
+/**
+ * Fetch all posts by a given author, matched by slugifying the author's
+ * display name the same way category/tag slugs are generated elsewhere in
+ * this codebase (Admin has no dedicated slug field). Returns the author's
+ * real name alongside their real posts, or null if no author matches.
+ */
+export const getPostsByAuthorSlug = unstable_cache(
+  async (slug: string): Promise<{ authorName: string; posts: PublicBlogPost[] } | null> => {
+    try {
+      const raw = await prisma.blogPost.findMany({
+        where: visibilityFilter(),
+        orderBy: { publishedAt: "desc" },
+        select: {
+          id: true, slug: true, title: true, excerpt: true,
+          featuredImage: true, publishedAt: true, content: true,
+          category: { select: { name: true, slug: true } },
+          tags:     { select: { tag: { select: { name: true, slug: true } } } },
+          author:   { select: { name: true } },
+        },
+      });
+
+      const matches = raw.filter((p) => p.author && slugify(p.author.name) === slug);
+      if (matches.length === 0) return null;
+
+      return {
+        authorName: matches[0].author!.name,
+        posts: matches.map((p) => ({
+          id: p.id, slug: p.slug, title: p.title, excerpt: p.excerpt,
+          featuredImage: p.featuredImage, publishedAt: p.publishedAt,
+          readTimeMin: estimateReadTime(p.content),
+          category: p.category, tags: p.tags.map((t) => t.tag),
+        })),
+      };
+    } catch {
+      return null;
+    }
+  },
+  ["posts-by-author"],
   { tags: [CACHE_TAGS.blogPosts], revalidate: 60 }
 );
 

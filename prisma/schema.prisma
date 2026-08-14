@@ -37,7 +37,7 @@ model AdminSession {
   id        String   @id @default(cuid())
   adminId   String
   token     String   @unique
-  expiresAt DateTime
+  expiresAt DateTime 
   createdAt DateTime @default(now())
 
   admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)

@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileEdit, Eye, Download, Save, RotateCcw, Type } from "lucide-react";
+import { FileEdit, Eye, Download, Save, RotateCcw, Type, Underline as UnderlineIcon } from "lucide-react";
 import { toast } from "sonner";
 import { downloadBlob } from "@/lib/utils";
 import dynamic from "next/dynamic";
+import rehypeRaw from "rehype-raw";
 
 // Lazy-load the heavy editor
 const MDEditor = dynamic(
@@ -25,6 +26,14 @@ const MarkdownPreview = dynamic(
   () => import("@uiw/react-md-editor").then((m) => m.default.Markdown!),
   { ssr: false }
 );
+
+// Custom toolbar command for underline — standard Markdown/GFM has no native
+// underline syntax (deliberately, to avoid confusion with links), so this
+// wraps the selection in <u> tags, the conventional way to represent it.
+// Rendered correctly by both the live preview (via rehype-raw below) and the
+// PDF export (marked passes raw HTML through by default; browsers underline
+// <u> natively, so html2canvas captures it correctly).
+const UNDERLINE_ICON = <UnderlineIcon size={12} />;
 
 const AUTOSAVE_KEY = "toolsbar_text_to_pdf_content";
 
@@ -71,6 +80,29 @@ export function TextToPdf() {
   const [fontSize, setFontSize]   = useState(12);
   const [isExporting, setIsExporting] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [editorCommands, setEditorCommands] = useState<import("@uiw/react-md-editor").ICommand[] | undefined>(undefined);
+
+  // Build the toolbar's command list (defaults + custom Underline button)
+  // once the editor package has loaded — it's dynamically imported above,
+  // so its `commands` helpers aren't available until then.
+  useEffect(() => {
+    let cancelled = false;
+    import("@uiw/react-md-editor").then((m) => {
+      if (cancelled) return;
+      const underlineCommand: import("@uiw/react-md-editor").ICommand = {
+        name: "underline",
+        keyCommand: "underline",
+        shortcuts: "ctrlcmd+u",
+        buttonProps: { "aria-label": "Underline", title: "Underline (Ctrl+U)" },
+        icon: UNDERLINE_ICON,
+        execute: (state, api) => {
+          api.replaceSelection(`<u>${state.selectedText || "underlined text"}</u>`);
+        },
+      };
+      setEditorCommands([...m.commands.getCommands(), underlineCommand]);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // Load auto-saved content
   useEffect(() => {
@@ -127,6 +159,7 @@ export function TextToPdf() {
           p{margin:0 0 .75em}
           strong{font-weight:700}
           em{font-style:italic}
+          u{text-decoration:underline}
           code{background:#f4f4f4;padding:2px 5px;border-radius:3px;font-family:monospace;font-size:.9em}
           pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow:hidden;margin:0 0 1em}
           pre code{background:none;padding:0}
@@ -262,6 +295,7 @@ export function TextToPdf() {
                 preview="edit"
                 height={viewMode === "split" ? 400 : 500}
                 style={{ background: "rgba(10,15,30,0.9)", borderRadius: 0 }}
+                commands={editorCommands}
               />
             </div>
           </div>
@@ -279,7 +313,7 @@ export function TextToPdf() {
               data-color-mode="dark">
               {MarkdownPreview ? (
                 <div className="prose-cyber">
-                  <MarkdownPreview source={content} style={{ background: "transparent", color: "#e2e8f0" }} />
+                  <MarkdownPreview source={content} style={{ background: "transparent", color: "#e2e8f0" }} rehypePlugins={[rehypeRaw]} />
                 </div>
               ) : (
                 <pre className="text-xs text-text-muted whitespace-pre-wrap">{content}</pre>

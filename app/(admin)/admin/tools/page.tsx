@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Star, Eye, EyeOff, BadgeCheck, RefreshCw } from "lucide-react";
+import { Star, Eye, EyeOff, BadgeCheck, RefreshCw, ArrowUp, ArrowDown } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { TOOLS_CONFIG, TOOL_CATEGORIES, NEON_COLOR_MAP, NEON_BG_CLASS } from "@/config/tools.config";
 import { toast } from "sonner";
@@ -12,13 +12,13 @@ function getLucideIcon(name: string) {
   return icons[name] ?? icons["Wrench"];
 }
 
-interface ToolState { isActive: boolean; isFeatured: boolean; isNew: boolean; }
+interface ToolState { isActive: boolean; isFeatured: boolean; isNew: boolean; order: number; }
 
 function staticDefaults(): Record<string, ToolState> {
   return Object.fromEntries(
     TOOLS_CONFIG.map((t) => [
       t.slug,
-      { isActive: true, isFeatured: t.isFeatured ?? false, isNew: t.isNew ?? false },
+      { isActive: true, isFeatured: t.isFeatured ?? false, isNew: t.isNew ?? false, order: t.order },
     ])
   );
 }
@@ -38,12 +38,12 @@ export default function AdminToolsPage() {
           throw new Error(body?.error ?? "Could not load DB state.");
         }
         const dbTools = await res.json() as Array<{
-          slug: string; isActive: boolean; isFeatured: boolean; isNew: boolean;
+          slug: string; isActive: boolean; isFeatured: boolean; isNew: boolean; order: number;
         }>;
         if (Array.isArray(dbTools) && dbTools.length > 0) {
           const map: Record<string, ToolState> = { ...staticDefaults() };
           for (const t of dbTools) {
-            map[t.slug] = { isActive: t.isActive, isFeatured: t.isFeatured, isNew: t.isNew };
+            map[t.slug] = { isActive: t.isActive, isFeatured: t.isFeatured, isNew: t.isNew, order: t.order };
           }
           setToolStates(map);
         }
@@ -84,13 +84,58 @@ export default function AdminToolsPage() {
     }
   }
 
+  async function moveOrder(categoryTools: typeof TOOLS_CONFIG, index: number, dir: "up" | "down") {
+    const swapIndex = dir === "up" ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= categoryTools.length) return;
+
+    const a = categoryTools[index];
+    const b = categoryTools[swapIndex];
+    const aOrder = toolStates[a.slug]?.order ?? a.order;
+    const bOrder = toolStates[b.slug]?.order ?? b.order;
+
+    setSaving(a.slug);
+    const previousA = toolStates[a.slug];
+    const previousB = toolStates[b.slug];
+    setToolStates((prev) => ({
+      ...prev,
+      [a.slug]: { ...(prev[a.slug] ?? staticDefaults()[a.slug]), order: bOrder },
+      [b.slug]: { ...(prev[b.slug] ?? staticDefaults()[b.slug]), order: aOrder },
+    }));
+
+    try {
+      const [resA, resB] = await Promise.all([
+        fetch("/api/admin/tools", {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slug: a.slug, order: bOrder }),
+        }),
+        fetch("/api/admin/tools", {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slug: b.slug, order: aOrder }),
+        }),
+      ]);
+      if (!resA.ok || !resB.ok) throw new Error("Reorder failed.");
+      toast.success("Order updated — public site updated");
+    } catch (err) {
+      setToolStates((prev) => {
+        const next = { ...prev };
+        if (previousA) next[a.slug] = previousA; else delete next[a.slug];
+        if (previousB) next[b.slug] = previousB; else delete next[b.slug];
+        return next;
+      });
+      toast.error(err instanceof Error ? err.message : "Reorder failed — please try again.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+
   return (
     <div className="p-6 lg:p-8">
       <div className="mb-6 flex items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-xl font-black text-white tracking-widest mb-1">TOOL MANAGER</h1>
           <p className="text-xs font-mono text-text-muted">
-            {TOOLS_CONFIG.length} tools · Toggle visibility, set featured, add NEW badge
+            {TOOLS_CONFIG.length} tools · Toggle visibility, set featured, add NEW badge, reorder within category
           </p>
         </div>
         {loading && (
@@ -116,7 +161,10 @@ export default function AdminToolsPage() {
 
       {/* Tool list grouped by category */}
       {TOOL_CATEGORIES.map((cat) => {
-        const catTools = TOOLS_CONFIG.filter((t) => t.category === cat.id);
+        const catTools = TOOLS_CONFIG
+          .filter((t) => t.category === cat.id)
+          .slice()
+          .sort((a, b) => (toolStates[a.slug]?.order ?? a.order) - (toolStates[b.slug]?.order ?? b.order));
         return (
           <div key={cat.id} className="mb-8">
             <h2 className="text-xs font-display font-bold tracking-widest text-text-muted uppercase mb-3">
@@ -173,6 +221,28 @@ export default function AdminToolsPage() {
 
                     {/* Controls */}
                     <div className="flex items-center gap-2">
+                      {/* Reorder */}
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          onClick={() => moveOrder(catTools, i, "up")}
+                          disabled={isBusy || loading || i === 0}
+                          title="Move up"
+                          className="w-6 h-3.5 rounded flex items-center justify-center text-text-muted hover:text-neon-cyan transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                          style={{ background: "rgba(255,255,255,0.04)" }}
+                        >
+                          <ArrowUp className="w-2.5 h-2.5" />
+                        </button>
+                        <button
+                          onClick={() => moveOrder(catTools, i, "down")}
+                          disabled={isBusy || loading || i === catTools.length - 1}
+                          title="Move down"
+                          className="w-6 h-3.5 rounded flex items-center justify-center text-text-muted hover:text-neon-cyan transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                          style={{ background: "rgba(255,255,255,0.04)" }}
+                        >
+                          <ArrowDown className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+
                       {/* Featured */}
                       <button
                         onClick={() => updateTool(tool.slug, { isFeatured: !state.isFeatured })}

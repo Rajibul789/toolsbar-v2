@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { TOOLS_CONFIG } from "@/config/tools.config";
 import { ToolCard } from "@/components/tools/ToolCard";
-import { getPostBySlug } from "@/lib/data/blog";
+import { getPostBySlug, getRelatedPosts } from "@/lib/data/blog";
 import { SITE_CONFIG } from "@/config/site.config";
 
 // ── Static post data — used as fallback when the DB has no entry for the slug ──
@@ -239,6 +239,7 @@ export default async function BlogPostPage({
     const relatedTool = dbPost.relatedToolSlug
       ? TOOLS_CONFIG.find((t) => t.slug === dbPost.relatedToolSlug)
       : null;
+    const relatedPosts = await getRelatedPosts(dbPost.id, dbPost.category?.slug ?? null, 3);
     const articleSchema = {
       "@context": "https://schema.org", "@type": "Article",
       headline: dbPost.title, description: dbPost.excerpt,
@@ -290,6 +291,14 @@ export default async function BlogPostPage({
                   {dbPost.author && <span>By {dbPost.author.name}</span>}
                 </div>
               </header>
+              {dbPost.featuredImage && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={dbPost.featuredImage}
+                  alt={dbPost.title}
+                  className="w-full rounded-2xl object-cover mb-10 max-h-[420px]"
+                />
+              )}
               <div className="prose-cyber">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}
                   components={{
@@ -340,6 +349,26 @@ export default async function BlogPostPage({
                 </div>
               </section>
             )}
+            {relatedPosts.length > 0 && (
+              <section className="mt-12">
+                <h2 className="font-display text-xl font-black text-white tracking-wider mb-6">RELATED ARTICLES</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {relatedPosts.map((rp) => (
+                    <Link key={rp.slug} href={`/blog/${rp.slug}`} className="glass-panel p-4 hover:border-neon-cyan/30 transition-all group">
+                      {rp.category && (
+                        <p className="text-[10px] font-mono text-neon-cyan mb-1.5">{rp.category.name}</p>
+                      )}
+                      <h3 className="font-display text-xs font-bold text-white group-hover:text-neon-cyan transition-colors leading-snug line-clamp-2">
+                        {rp.title}
+                      </h3>
+                      <p className="text-[11px] font-mono text-text-muted mt-2 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />{rp.readTimeMin} min read
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         </div>
       </>
@@ -353,6 +382,7 @@ export default async function BlogPostPage({
   const relatedTool = post.relatedToolSlug
     ? TOOLS_CONFIG.find((t) => t.slug === post.relatedToolSlug)
     : null;
+  const relatedPosts = await getRelatedPosts(post.slug, post.categorySlug, 3);
 
   const articleSchema = {
     "@context": "https://schema.org",
@@ -503,6 +533,28 @@ export default async function BlogPostPage({
                     <h3 className="text-sm font-mono font-semibold text-text-primary mb-2">{q}</h3>
                     <p className="text-xs text-text-muted font-mono leading-relaxed">{a}</p>
                   </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Related articles */}
+          {relatedPosts.length > 0 && (
+            <section className="mt-12">
+              <h2 className="font-display text-xl font-black text-white tracking-wider mb-6">RELATED ARTICLES</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {relatedPosts.map((rp) => (
+                  <Link key={rp.slug} href={`/blog/${rp.slug}`} className="glass-panel p-4 hover:border-neon-cyan/30 transition-all group">
+                    {rp.category && (
+                      <p className="text-[10px] font-mono text-neon-cyan mb-1.5">{rp.category.name}</p>
+                    )}
+                    <h3 className="font-display text-xs font-bold text-white group-hover:text-neon-cyan transition-colors leading-snug line-clamp-2">
+                      {rp.title}
+                    </h3>
+                    <p className="text-[11px] font-mono text-text-muted mt-2 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />{rp.readTimeMin} min read
+                    </p>
+                  </Link>
                 ))}
               </div>
             </section>

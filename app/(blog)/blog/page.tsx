@@ -14,10 +14,19 @@ export const metadata: Metadata = {
 function BlogCard({ post, featured = false }: { post: PublicBlogPost; featured?: boolean }) {
   return (
     <article className={`blog-card ${featured ? "md:col-span-2" : ""}`}>
-      <div
-        className="h-1"
-        style={{ background: "linear-gradient(90deg, rgba(0,245,255,0.6), rgba(191,0,255,0.6))" }}
-      />
+      {post.featuredImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={post.featuredImage}
+          alt={post.title}
+          className={`w-full object-cover ${featured ? "h-48 md:h-56" : "h-36"}`}
+        />
+      ) : (
+        <div
+          className="h-1"
+          style={{ background: "linear-gradient(90deg, rgba(0,245,255,0.6), rgba(191,0,255,0.6))" }}
+        />
+      )}
       <div className="p-6">
         {featured && (
           <span className="badge-neon text-[10px] mb-3 inline-flex">FEATURED</span>

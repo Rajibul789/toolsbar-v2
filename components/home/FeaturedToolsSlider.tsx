@@ -44,6 +44,8 @@ export function FeaturedToolsSlider({ serverTools }: FeaturedToolsSliderProps) {
   const [current, setCurrent] = useState(0);
   const [direction, setDirection] = useState<"left" | "right">("right");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const touchStartX = useRef<number | null>(null);
+  const touchDeltaX = useRef(0);
 
   // Prefer DB-sourced tools; fall back to static config
   const tools: ToolConfig[] =
@@ -73,6 +75,31 @@ export function FeaturedToolsSlider({ serverTools }: FeaturedToolsSliderProps) {
     startTimer();
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [startTimer]);
+
+  const SWIPE_THRESHOLD = 50; // px — below this, treat as a tap/scroll, not a swipe
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+    touchDeltaX.current = 0;
+    if (timerRef.current) clearInterval(timerRef.current); // pause auto-slide while touching
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (touchStartX.current === null) return;
+    touchDeltaX.current = e.touches[0].clientX - touchStartX.current;
+  }
+
+  function handleTouchEnd() {
+    if (touchStartX.current === null) return;
+    if (touchDeltaX.current <= -SWIPE_THRESHOLD) {
+      go(current + 1, "right"); // swiped left → next slide
+    } else if (touchDeltaX.current >= SWIPE_THRESHOLD) {
+      go(current - 1, "left"); // swiped right → previous slide
+    }
+    touchStartX.current = null;
+    touchDeltaX.current = 0;
+    startTimer(); // resume auto-slide after the gesture
+  }
 
   const tool = tools[current];
   if (!tool) return null;
@@ -114,6 +141,9 @@ export function FeaturedToolsSlider({ serverTools }: FeaturedToolsSliderProps) {
           border: "1px solid rgba(0,245,255,0.1)",
           minHeight: 420,
         }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         {/* Background */}
         <div
