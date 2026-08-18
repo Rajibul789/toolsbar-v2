@@ -11,8 +11,8 @@ import { JsonLd } from "@/components/seo/JsonLd";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToolsStore } from "@/stores/toolsStore";
 import { toast } from "sonner";
-import { Heart, Share2 } from "lucide-react";
-import { SITE_CONFIG } from "@/config/site.config";
+import { Heart, Share2, BookOpen, Clock } from "lucide-react";
+import type { PublicBlogPost } from "@/lib/data/blog";
 
 function getLucideIcon(name: string) {
   const icons = LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>>;
@@ -21,10 +21,11 @@ function getLucideIcon(name: string) {
 
 interface ToolPageShellProps {
   tool: ToolConfig;
+  relatedPosts?: PublicBlogPost[];
   children: React.ReactNode;
 }
 
-export function ToolPageShell({ tool, children }: ToolPageShellProps) {
+export function ToolPageShell({ tool, relatedPosts = [], children }: ToolPageShellProps) {
   const neonColor  = NEON_COLOR_MAP[tool.accentColor];
   const bgColor    = NEON_BG_CLASS[tool.accentColor];
   const borderColor = NEON_BORDER_CLASS[tool.accentColor];
@@ -65,7 +66,7 @@ export function ToolPageShell({ tool, children }: ToolPageShellProps) {
     description: tool.longDesc ?? tool.shortDesc,
     applicationCategory: "UtilitiesApplication",
     operatingSystem: "Web Browser",
-    url: `${SITE_CONFIG.url}/tools/${tool.slug}`,
+    url: `https://toolsbar.com/tools/${tool.slug}`,
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     featureList: tool.howItWorks,
   };
@@ -74,9 +75,9 @@ export function ToolPageShell({ tool, children }: ToolPageShellProps) {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home",  item: SITE_CONFIG.url },
-      { "@type": "ListItem", position: 2, name: "Tools", item: `${SITE_CONFIG.url}/tools` },
-      { "@type": "ListItem", position: 3, name: tool.name, item: `${SITE_CONFIG.url}/tools/${tool.slug}` },
+      { "@type": "ListItem", position: 1, name: "Home",  item: "https://toolsbar.com" },
+      { "@type": "ListItem", position: 2, name: "Tools", item: "https://toolsbar.com/tools" },
+      { "@type": "ListItem", position: 3, name: tool.name, item: `https://toolsbar.com/tools/${tool.slug}` },
     ],
   };
 
@@ -250,6 +251,32 @@ export function ToolPageShell({ tool, children }: ToolPageShellProps) {
               <h2 className="font-display text-lg font-black text-white tracking-wider mb-6">RELATED TOOLS</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {relatedTools.map((t, i) => <ToolCard key={t.slug} tool={t} index={i} />)}
+              </div>
+            </div>
+          )}
+
+          {/* Related articles — dynamic, from BlogPost.relatedToolSlug */}
+          {relatedPosts.length > 0 && (
+            <div className="mt-12">
+              <h2 className="font-display text-lg font-black text-white tracking-wider mb-6 flex items-center gap-2">
+                <BookOpen className="w-4 h-4" style={{ color: neonColor }} />
+                RELATED ARTICLES
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {relatedPosts.map((post) => (
+                  <Link key={post.slug} href={`/blog/${post.slug}`}
+                    className="glass-panel p-4 hover:border-neon-cyan/30 transition-all group">
+                    {post.category && (
+                      <p className="text-[10px] font-mono mb-1.5" style={{ color: neonColor }}>{post.category.name}</p>
+                    )}
+                    <h3 className="font-display text-xs font-bold text-white group-hover:text-neon-cyan transition-colors leading-snug line-clamp-2">
+                      {post.title}
+                    </h3>
+                    <p className="text-[11px] font-mono text-text-muted mt-2 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />{post.readTimeMin} min read
+                    </p>
+                  </Link>
+                ))}
               </div>
             </div>
           )}

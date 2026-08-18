@@ -3,6 +3,7 @@ import type { Metadata, ResolvingMetadata } from "next";
 import dynamic from "next/dynamic";
 import { getToolBySlug, TOOLS_CONFIG } from "@/config/tools.config";
 import { ToolPageShell } from "@/components/tools/ToolPageShell";
+import { getPostsByRelatedTool } from "@/lib/data/blog";
 
 // Loading skeleton shown while each tool chunk loads
 function ToolSkeleton() {
@@ -92,8 +93,10 @@ export default async function ToolPage({
   const ToolComponent = TOOL_COMPONENTS[slug];
   if (!ToolComponent) return notFound();
 
+  const relatedPosts = await getPostsByRelatedTool(slug);
+
   return (
-    <ToolPageShell tool={tool}>
+    <ToolPageShell tool={tool} relatedPosts={relatedPosts}>
       <ToolComponent />
     </ToolPageShell>
   );

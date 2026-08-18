@@ -326,3 +326,40 @@ export const getCategoryBySlug = unstable_cache(
   ["category-by-slug"],
   { tags: [CACHE_TAGS.blogPosts], revalidate: 60 }
 );
+
+/**
+ * Fetch published (or now-due scheduled) posts associated with a given tool,
+ * via the same `relatedToolSlug` field the admin post editor already writes
+ * (previously only read in one direction — the post page's "Try the Tool"
+ * CTA — never the reverse). Fully dynamic: publishing, editing, or
+ * unpublishing a post's tool association changes what shows here on the
+ * next request, no code or config changes required.
+ */
+export const getPostsByRelatedTool = unstable_cache(
+  async (toolSlug: string, limit = 3): Promise<PublicBlogPost[]> => {
+    try {
+      const raw = await prisma.blogPost.findMany({
+        where: { ...visibilityFilter(), relatedToolSlug: toolSlug },
+        orderBy: { publishedAt: "desc" },
+        take: limit,
+        select: {
+          id: true, slug: true, title: true, excerpt: true,
+          featuredImage: true, publishedAt: true, content: true,
+          category: { select: { name: true, slug: true } },
+          tags:     { select: { tag: { select: { name: true, slug: true } } } },
+        },
+      });
+
+      return raw.map((p) => ({
+        id: p.id, slug: p.slug, title: p.title, excerpt: p.excerpt,
+        featuredImage: p.featuredImage, publishedAt: p.publishedAt,
+        readTimeMin: estimateReadTime(p.content),
+        category: p.category, tags: p.tags.map((t) => t.tag),
+      }));
+    } catch {
+      return [];
+    }
+  },
+  ["posts-by-related-tool"],
+  { tags: [CACHE_TAGS.blogPosts], revalidate: 60 }
+);

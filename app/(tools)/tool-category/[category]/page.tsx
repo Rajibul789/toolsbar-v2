@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, BookOpen, Clock } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import {
   TOOL_CATEGORIES,
@@ -12,6 +12,7 @@ import {
 import { ToolCard } from "@/components/tools/ToolCard";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { SITE_CONFIG } from "@/config/site.config";
+import { getPublishedPosts } from "@/lib/data/blog";
 
 function getLucideIcon(name: string) {
   const icons = LucideIcons as unknown as Record<
@@ -55,6 +56,7 @@ export default async function ToolCategoryPage({
   const neonColor = NEON_COLOR_MAP[cat.color];
   const bgColor = NEON_BG_CLASS[cat.color];
   const CatIcon = getLucideIcon(cat.icon);
+  const { posts: relatedPosts } = await getPublishedPosts({ categorySlug: category, limit: 3 });
 
   const listSchema = {
     "@context": "https://schema.org",
@@ -177,6 +179,29 @@ export default async function ToolCategoryPage({
               <ToolCard key={tool.slug} tool={tool} index={i} />
             ))}
           </div>
+
+          {/* Related articles — dynamic, from posts filed under this category */}
+          {relatedPosts.length > 0 && (
+            <div className="mt-14">
+              <h2 className="font-display text-lg font-black text-white tracking-wider mb-6 flex items-center gap-2">
+                <BookOpen className="w-4 h-4" style={{ color: neonColor }} />
+                RELATED ARTICLES
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {relatedPosts.map((post) => (
+                  <Link key={post.slug} href={`/blog/${post.slug}`}
+                    className="glass-panel p-4 hover:border-neon-cyan/30 transition-all group">
+                    <h3 className="font-display text-xs font-bold text-white group-hover:text-neon-cyan transition-colors leading-snug line-clamp-2">
+                      {post.title}
+                    </h3>
+                    <p className="text-[11px] font-mono text-text-muted mt-2 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />{post.readTimeMin} min read
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>
