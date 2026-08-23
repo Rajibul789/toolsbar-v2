@@ -3,13 +3,29 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FileOutput, Copy, Download } from "lucide-react";
+import type { PDFPageProxy } from "pdfjs-dist";
 import { UploadZone } from "@/components/tools/UploadZone";
 import { CyberScanner } from "@/components/animations/CyberScanner";
 import { ResultReveal } from "@/components/tools/ResultReveal";
 import { downloadBlob } from "@/lib/utils";
+import { createOcrWorker, detectLanguage, isTextLayerUsable } from "@/lib/ocr";
 import { toast } from "sonner";
 
 type ProcessState = "idle" | "processing" | "complete" | "error";
+
+/** Renders a PDF.js page to a canvas — used as OCR input when a page's
+ *  embedded text layer is missing or unusable. Mirrors the same
+ *  getViewport/render pattern already used by PDF Compress and PDF Split. */
+async function renderPageToCanvas(page: PDFPageProxy, scale = 2.0): Promise<HTMLCanvasElement> {
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas rendering is not available in this browser.");
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas;
+}
 
 export function PdfToText() {
   const [file, setFile] = useState<File | null>(null);
@@ -18,6 +34,8 @@ export function PdfToText() {
   const [status, setStatus] = useState("");
   const [extractedText, setExtractedText] = useState("");
   const [pageCount, setPageCount] = useState(0);
+  const [usedOcr, setUsedOcr] = useState(false);
+  const [detectedScript, setDetectedScript] = useState<string | null>(null);
 
   const onDrop = useCallback((files: File[]) => {
     setFile(files[0]);
@@ -31,11 +49,18 @@ export function PdfToText() {
     setProgress(5);
     setStatus("LOADING PDF ENGINE...");
 
+    // Created lazily, only if some page actually turns out to need OCR, and
+    // reused across every page that needs it in this document (spinning up
+    // a fresh worker per page would reload the language model every time).
+    let ocrWorker: Awaited<ReturnType<typeof createOcrWorker>> | null = null;
+    let resolvedLang = "";
+    let currentOcrPage = 0; // read by the progress logger below, kept in sync each iteration
+
     try {
       const pdfjsLib = await import("pdfjs-dist");
       pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
-      setProgress(15);
+      setProgress(10);
       setStatus("PARSING DOCUMENT STRUCTURE...");
 
       const bytes = await file.arrayBuffer();
@@ -43,32 +68,96 @@ export function PdfToText() {
       const total = doc.numPages;
       setPageCount(total);
 
-      let fullText = "";
+      const pages: { text: string; usedOcr: boolean; failed: boolean }[] = [];
+
       for (let i = 1; i <= total; i++) {
-        setStatus(`EXTRACTING PAGE ${i} OF ${total}...`);
-        setProgress(15 + Math.round((i / total) * 75));
+        const pageBaseProgress = 10 + Math.round(((i - 1) / total) * 80);
+        setProgress(pageBaseProgress);
+        try {
+          setStatus(`READING PAGE ${i} OF ${total}...`);
+          const page = await doc.getPage(i);
+          const content = await page.getTextContent();
+          const rawText = content.items
+            .map((item: unknown) => {
+              const it = item as { str: string; hasEOL?: boolean };
+              return it.hasEOL ? it.str + "\n" : it.str + " ";
+            })
+            .join("")
+            .trim();
 
-        const page = await doc.getPage(i);
-        const content = await page.getTextContent();
-        const pageText = content.items
-          .map((item: unknown) => {
-            const it = item as { str: string; hasEOL?: boolean };
-            return it.hasEOL ? it.str + "\n" : it.str + " ";
-          })
-          .join("")
-          .trim();
+          if (isTextLayerUsable(rawText)) {
+            // Fast path, unchanged for the common case: a normal PDF with a
+            // real, trustworthy text layer never touches OCR at all.
+            pages.push({ text: rawText, usedOcr: false, failed: false });
+          } else {
+            // Text layer is missing (scanned/image-only page), too short to
+            // trust, or looks corrupted (broken font encoding) -> OCR the
+            // rendered page instead of the unreliable embedded text.
+            currentOcrPage = i;
+            const canvas = await renderPageToCanvas(page);
 
-        fullText += `\n\n--- Page ${i} ---\n\n${pageText}`;
+            if (!ocrWorker) {
+              // Detected once per document (on whichever page first needs
+              // OCR) and reused for every subsequent page that needs it -
+              // re-running detection per page would be wasteful, and a
+              // document's dominant language rarely changes page to page.
+              setStatus(`DETECTING LANGUAGE (PAGE ${i} OF ${total})...`);
+              const detected = await detectLanguage(canvas);
+              resolvedLang = detected.lang;
+              setDetectedScript(detected.script);
+              ocrWorker = await createOcrWorker(resolvedLang, (update) => {
+                const pct = Math.round(update.progress * 100);
+                setStatus(`OCR PAGE ${currentOcrPage} OF ${total}: ${update.status.toUpperCase().replace(/_/g, " ")} ${pct}%`);
+                setProgress(10 + Math.round(((currentOcrPage - 1 + update.progress) / total) * 80));
+              });
+            } else {
+              setStatus(`RUNNING OCR ON PAGE ${i} OF ${total} (this can take longer)...`);
+            }
+
+            const { data } = await ocrWorker.recognize(canvas);
+            const ocrText = data.text.trim();
+            pages.push({ text: ocrText, usedOcr: ocrText.length > 0, failed: false });
+          }
+        } catch (pageErr) {
+          // A single bad page (corrupt content stream, unsupported
+          // feature, OCR failure, etc.) no longer aborts the whole
+          // document - the rest of the pages still get returned.
+          console.error(`Page ${i} failed:`, pageErr);
+          pages.push({ text: "", usedOcr: false, failed: true });
+        }
         await new Promise((r) => setTimeout(r, 10));
       }
 
-      setExtractedText(fullText.trim());
+      setProgress(95);
+      setStatus("FINALIZING...");
+
+      const pagesWithContent = pages.filter((p) => p.text.length > 0).length;
+      const anyOcrUsed = pages.some((p) => p.usedOcr);
+
+      // Page markers are only meaningful once we know whether a page truly
+      // has content - unlike before, an empty page no longer masquerades
+      // as extracted text just because a header was appended for it.
+      const fullText = pages
+        .map((p, idx) => {
+          const label = `Page ${idx + 1}${p.usedOcr ? " (via OCR)" : ""}`;
+          if (p.text.length === 0) {
+            return `\n\n--- ${label} ---\n\n[No text could be extracted from this page${p.failed ? " (processing error)" : ""}.]`;
+          }
+          return `\n\n--- ${label} ---\n\n${p.text}`;
+        })
+        .join("")
+        .trim();
+
+      setExtractedText(pagesWithContent > 0 ? fullText : "");
+      setUsedOcr(anyOcrUsed);
       setProgress(100);
       setState("complete");
     } catch (err) {
       console.error(err);
       setState("error");
-      toast.error("Text extraction failed. The PDF may be scanned or encrypted.");
+      toast.error("Text extraction failed. The PDF may be corrupted, password-protected, or in an unsupported format.");
+    } finally {
+      if (ocrWorker) await ocrWorker.terminate();
     }
   }
 
@@ -88,6 +177,8 @@ export function PdfToText() {
     setExtractedText("");
     setState("idle");
     setProgress(0);
+    setUsedOcr(false);
+    setDetectedScript(null);
   }
 
   const wordCount = extractedText.trim().split(/\s+/).filter(Boolean).length;
@@ -111,7 +202,7 @@ export function PdfToText() {
               style={{ background: "rgba(0,255,136,0.04)", border: "1px solid rgba(0,255,136,0.12)" }}
             >
               <span className="text-neon-green">ℹ</span>{" "}
-              Works on PDFs with a text layer. Scanned image-only PDFs return empty results — use Image to Word for those.
+              Reads text directly from the PDF. Scanned or image-only pages are automatically read with OCR as a fallback, with the language auto-detected per document — this makes those pages slower to process.
             </div>
 
             {file && (
@@ -155,6 +246,16 @@ export function PdfToText() {
                     ))}
                   </div>
 
+                  {usedOcr && (
+                    <div
+                      className="rounded-lg px-4 py-2.5 text-xs font-mono text-text-muted"
+                      style={{ background: "rgba(255,204,0,0.05)", border: "1px solid rgba(255,204,0,0.15)" }}
+                    >
+                      <span className="text-neon-yellow">ℹ</span>{" "}
+                      One or more pages had no usable text layer, so OCR was used for those (marked "via OCR" below){detectedScript ? ` — detected script: ${detectedScript}` : ""}. OCR is best-effort and may contain errors, especially for handwriting or low-quality scans.
+                    </div>
+                  )}
+
                   {/* Text preview */}
                   <div className="relative">
                     <textarea
@@ -195,11 +296,10 @@ export function PdfToText() {
                   style={{ background: "rgba(255,204,0,0.05)", border: "1px solid rgba(255,204,0,0.2)" }}
                 >
                   <p className="text-sm font-mono font-semibold text-neon-yellow mb-2">
-                    No selectable text was found in this PDF{pageCount ? ` (${pageCount} page${pageCount === 1 ? "" : "s"} scanned)` : ""}.
+                    No text could be recovered from this PDF{pageCount ? ` (${pageCount} page${pageCount === 1 ? "" : "s"})` : ""}.
                   </p>
                   <p className="text-xs font-mono text-text-muted leading-relaxed">
-                    This usually means the PDF is a scanned image with no text layer. Try the{" "}
-                    <span className="text-neon-green">Image to Word</span> tool instead — it uses OCR to read text from scanned pages.
+                    Both the embedded text layer and an automatic OCR pass came back empty. This usually means the pages are blank, extremely low quality, or in a format OCR can&apos;t read reliably.
                   </p>
                 </div>
               )}
