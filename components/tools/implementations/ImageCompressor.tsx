@@ -6,7 +6,7 @@ import { ImageDown, ArrowDown } from "lucide-react";
 import { UploadZone } from "@/components/tools/UploadZone";
 import { CyberScanner } from "@/components/animations/CyberScanner";
 import { ResultReveal, DownloadButton } from "@/components/tools/ResultReveal";
-import { formatBytes, downloadBlob } from "@/lib/utils";
+import { formatBytes, downloadBlob, getFileExtension, stripExtension } from "@/lib/utils";
 import { toast } from "sonner";
 
 type ProcessState = "idle" | "processing" | "complete" | "error";
@@ -18,6 +18,13 @@ interface CompressResult {
   compressedSize: number;
   dataUrl: string;
   savings: number;
+  /** Actual extension of the returned file — may differ from the upload
+   *  (e.g. a PNG that fell back to JPEG). Always trust this over the
+   *  original filename when building a download name. */
+  outputExt: string;
+  /** True when the output format differs from the input format
+   *  (currently only possible via the PNG -> JPEG fallback). */
+  formatChanged: boolean;
 }
 
 export function ImageCompressor() {
@@ -34,46 +41,102 @@ export function ImageCompressor() {
     setResults([]);
   }, []);
 
+  function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string, quality?: number): Promise<Blob | null> {
+    return new Promise((resolve) => canvas.toBlob(resolve, mimeType, quality));
+  }
+
   async function compressImage(file: File, q: number): Promise<CompressResult> {
-    return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    try {
       const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return reject(new Error("Canvas not available"));
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () =>
+          reject(
+            new Error(
+              `"${file.name}" could not be read as an image. It may be corrupted or in an unsupported format.`
+            )
+          );
+        img.src = url;
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      if (canvas.width === 0 || canvas.height === 0) {
+        throw new Error(`"${file.name}" has no readable image data.`);
+      }
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas rendering is not available in this browser.");
+
+      const isPng = file.type === "image/png";
+      const origExt = getFileExtension(file.name) || (isPng ? "png" : "jpg");
+
+      // Tier 0 / safety net: never return something bigger than what came in.
+      let bestBlob: Blob = file;
+      let bestExt = origExt;
+      let formatChanged = false;
+
+      if (isPng) {
+        // Tier 1 — native PNG re-encode. Canvas silently ignores the "quality"
+        // argument for PNG (it's lossless-only per the Canvas spec), so this
+        // only helps when the source wasn't already well-optimized. Never
+        // assume it wins — that assumption was the original bug.
         ctx.drawImage(img, 0, 0);
+        const pngBlob = await canvasToBlob(canvas, "image/png");
+        if (pngBlob && pngBlob.size < bestBlob.size) {
+          bestBlob = pngBlob;
+          bestExt = "png";
+        }
 
-        const mimeType =
-          file.type === "image/png" ? "image/png" : "image/jpeg";
-        const dataUrl = canvas.toDataURL(mimeType, q / 100);
+        // Tier 2 — PNG re-encode failed to shrink it: fall back to JPEG
+        // automatically. Flatten onto white first, since canvas serializes
+        // transparent pixels as black when encoding to a format with no
+        // alpha channel.
+        if (bestBlob === file) {
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+          const jpegBlob = await canvasToBlob(canvas, "image/jpeg", q / 100);
+          if (jpegBlob && jpegBlob.size < bestBlob.size) {
+            bestBlob = jpegBlob;
+            bestExt = "jpg";
+            formatChanged = true;
+          }
+        }
+      } else {
+        // Existing behavior preserved: non-PNG inputs compress to JPEG.
+        // Same transparency-safe flatten, in case the source is a
+        // transparent WebP hitting the identical black-background issue.
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        const jpegBlob = await canvasToBlob(canvas, "image/jpeg", q / 100);
+        if (jpegBlob && jpegBlob.size < bestBlob.size) {
+          bestBlob = jpegBlob;
+          bestExt = "jpg";
+          formatChanged = jpegBlob.type !== file.type;
+        }
+      }
 
-        canvas.toBlob(
-          (blob) => {
-            URL.revokeObjectURL(url);
-            if (!blob) return reject(new Error("Compression failed"));
-            const savings = Math.max(
-              0,
-              Math.round(((file.size - blob.size) / file.size) * 100)
-            );
-            resolve({
-              file,
-              originalSize: file.size,
-              compressedBlob: blob,
-              compressedSize: blob.size,
-              dataUrl,
-              savings,
-            });
-          },
-          mimeType,
-          q / 100
-        );
+      const dataUrl = canvas.toDataURL("image/png");
+      const savings = Math.max(0, Math.round(((file.size - bestBlob.size) / file.size) * 100));
+
+      return {
+        file,
+        originalSize: file.size,
+        compressedBlob: bestBlob,
+        compressedSize: bestBlob.size,
+        dataUrl,
+        savings,
+        outputExt: bestExt,
+        formatChanged,
       };
-      img.onerror = reject;
-      img.src = url;
-    });
+    } finally {
+      // Runs even if image loading throws above — the original code only
+      // revoked this inside the success path and leaked it on failure.
+      URL.revokeObjectURL(url);
+    }
   }
 
   async function handleCompress() {
@@ -111,7 +174,8 @@ export function ImageCompressor() {
     } catch (err) {
       console.error(err);
       setState("error");
-      toast.error("Compression failed. Please try again.");
+      const message = err instanceof Error ? err.message : "Compression failed. Please try again.";
+      toast.error(message);
     } finally {
       clearInterval(interval);
     }
@@ -126,8 +190,7 @@ export function ImageCompressor() {
 
   function downloadAll() {
     results.forEach((r, i) => {
-      const ext = r.file.name.split(".").pop() ?? "jpg";
-      const name = r.file.name.replace(`.${ext}`, `_compressed.${ext}`);
+      const name = `${stripExtension(r.file.name)}_compressed.${r.outputExt}`;
       setTimeout(() => downloadBlob(r.compressedBlob, name), i * 200);
     });
   }
@@ -249,13 +312,15 @@ export function ImageCompressor() {
                           <ArrowDown className="w-2.5 h-2.5 text-neon-green flex-shrink-0" />
                           <span className="text-neon-green">{formatBytes(r.compressedSize)}</span>
                           <span className="text-neon-purple">-{r.savings}%</span>
+                          {r.formatChanged && (
+                            <span className="text-neon-yellow">· converted to JPEG</span>
+                          )}
                         </div>
                       </div>
                       <DownloadButton
-                        onClick={() => {
-                          const ext = r.file.name.split(".").pop() ?? "jpg";
-                          downloadBlob(r.compressedBlob, r.file.name.replace(`.${ext}`, `_compressed.${ext}`));
-                        }}
+                        onClick={() =>
+                          downloadBlob(r.compressedBlob, `${stripExtension(r.file.name)}_compressed.${r.outputExt}`)
+                        }
                         label="Save"
                         color="purple"
                         className="text-xs px-3 py-1.5 flex-shrink-0"
