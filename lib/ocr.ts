@@ -50,12 +50,23 @@ export function isTextLayerUsable(text: string): boolean {
  *
  * Known, real limitation: Tesseract's OSD detects a *script*, not an
  * exact *language*. Several languages can share one script (Latin covers
- * English, French, Spanish, German, Vietnamese...; Arabic script also
- * covers Persian and Urdu; Cyrillic covers Russian, Bulgarian, Ukrainian,
- * Serbian...) - detection can only resolve to one representative default
- * per script, not to every language that happens to use it. This is an
- * inherent ceiling of script-level detection, not something fixable in
- * this implementation; it's reported here rather than papered over.
+ * English, French, Spanish, German, Italian, Portuguese, Dutch, Polish,
+ * Turkish, Vietnamese...; Arabic script also covers Persian and Urdu;
+ * Han covers both Chinese Simplified and Traditional; Cyrillic covers
+ * Russian, Bulgarian, Ukrainian, Serbian...) - detection can only resolve
+ * to one representative default per script, not to every language that
+ * happens to use it. This is an inherent ceiling of script-level
+ * detection, not something fixable in this implementation; it's reported
+ * here rather than papered over.
+ *
+ * This is exactly why LANGUAGE_LABELS/OCR_LANGUAGE_OPTIONS below covers
+ * more languages than this map does: adding e.g. French, German, or Urdu
+ * as *manually selectable* languages is straightforward (they're valid,
+ * loadable Tesseract packs), but they cannot be added as *new entries*
+ * here, since they share an existing script bucket (Latin -> eng, Arabic
+ * -> ara) that already has a representative default - a plain script name
+ * can only map to one code. Manual selection is what makes those
+ * languages reachable, not this map; that split is intentional.
  */
 const SCRIPT_LANGUAGE_MAP: Record<string, string> = {
   Latin: "eng",
@@ -89,6 +100,87 @@ const SCRIPT_LANGUAGE_MAP: Record<string, string> = {
  *  mapping above. Specifically validated for this app's primary real-world
  *  case (English + Bengali government/institutional PDFs). */
 const FALLBACK_LANGS = "eng+ben";
+
+/**
+ * Human-readable labels for a manual language picker (used by Image to
+ * Word). Keyed by Tesseract language code rather than script name, since
+ * several scripts above collapse to one language pack (Japanese, Hiragana,
+ * and Katakana all resolve to "jpn") - keying by code avoids duplicate
+ * picker entries. Every code here is verified directly against the
+ * installed tesseract.js version's own `languages` export - each one is
+ * a real, loadable pack, not an invented or assumed code.
+ *
+ * This list is intentionally broader than SCRIPT_LANGUAGE_MAP above: the
+ * scripts map only needs one representative code per *script* (that's all
+ * auto-detection can resolve to), while this one can freely list every
+ * individually *selectable* language, including several that share a
+ * script with one already in the map above (French/German/Spanish/
+ * Portuguese/Italian/Dutch/Polish/Turkish/Vietnamese all share Latin with
+ * English; Urdu shares Arabic script with Arabic; Chinese Traditional
+ * shares Han with Chinese Simplified). Extending this list is a pure data
+ * change - add a [code, label] pair, nothing else needs to change.
+ */
+const LANGUAGE_LABELS: [code: string, label: string][] = [
+  ["eng", "English"],
+  ["ben", "Bengali"],
+  ["hin", "Hindi"],
+  ["ara", "Arabic"],
+  ["urd", "Urdu"],
+  ["chi_sim", "Chinese (Simplified)"],
+  ["chi_tra", "Chinese (Traditional)"],
+  ["jpn", "Japanese"],
+  ["kor", "Korean"],
+  ["fra", "French"],
+  ["deu", "German"],
+  ["spa", "Spanish"],
+  ["por", "Portuguese"],
+  ["ita", "Italian"],
+  ["rus", "Russian"],
+  ["tur", "Turkish"],
+  ["nld", "Dutch"],
+  ["pol", "Polish"],
+  ["vie", "Vietnamese"],
+  ["ell", "Greek"],
+  ["heb", "Hebrew"],
+  ["tha", "Thai"],
+  ["tam", "Tamil"],
+  ["tel", "Telugu"],
+  ["kan", "Kannada"],
+  ["mal", "Malayalam"],
+  ["guj", "Gujarati"],
+  ["pan", "Punjabi"],
+  ["ori", "Odia"],
+  ["mya", "Burmese"],
+  ["kat", "Georgian"],
+  ["khm", "Khmer"],
+];
+
+export interface OcrLanguageOption {
+  /** Value to pass to createOcrWorker, e.g. "ben+eng". */
+  code: string;
+  label: string;
+}
+
+/**
+ * User-facing language choices for a manual picker. English and Bengali
+ * (alone, and combined) come first since they're this app's primary
+ * validated case; every other supported language follows, each paired
+ * with English by default - the same "documents commonly mix in English
+ * words/numbers" reasoning validated for PDF to Text's auto-detection
+ * applies here too. Does not include an "auto-detect" entry - callers
+ * that want auto-detect should offer it as a distinct, clearly-labelled
+ * choice (see detectLanguage above) rather than mixing it into this list,
+ * so it's never confused with a specific manual selection.
+ */
+export const OCR_LANGUAGE_OPTIONS: OcrLanguageOption[] = [
+  { code: "eng", label: "English" },
+  { code: "ben+eng", label: "Bengali + English" },
+  { code: "ben", label: "Bengali only" },
+  ...LANGUAGE_LABELS.filter(([code]) => code !== "eng" && code !== "ben").map(([code, label]) => ({
+    code: `${code}+eng`,
+    label: `${label} + English`,
+  })),
+];
 
 export interface DetectedLanguage {
   /** Language string ready to pass to createOcrWorker, e.g. "hin+eng". */

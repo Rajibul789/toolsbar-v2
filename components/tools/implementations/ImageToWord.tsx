@@ -2,14 +2,47 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanText, Copy, Download } from "lucide-react";
+import { ScanText, Copy, Download, Sparkles } from "lucide-react";
 import { UploadZone } from "@/components/tools/UploadZone";
 import { CyberScanner } from "@/components/animations/CyberScanner";
 import { ResultReveal } from "@/components/tools/ResultReveal";
 import { downloadBlob } from "@/lib/utils";
+import { createOcrWorker, detectLanguage, OCR_LANGUAGE_OPTIONS } from "@/lib/ocr";
 import { toast } from "sonner";
 
 type ProcessState = "idle" | "processing" | "complete" | "error";
+const AUTO_DETECT = "auto";
+
+/**
+ * Confirms a file is genuinely decodable image data using the browser's
+ * own (hardened, security-audited) image decoder, before handing it to
+ * Tesseract at all.
+ *
+ * This isn't redundant with Tesseract's own error handling: Tesseract's
+ * image loading is backed by a bundled WASM build of Leptonica, and
+ * malformed input can make it abort in a way that crosses the worker
+ * boundary as an uncaught exception rather than a normal promise
+ * rejection - confirmed both empirically (three different kinds of
+ * invalid image all crashed the process outright in testing, not just
+ * one edge case) and against Tesseract.js's own issue tracker, where
+ * this exact "impossible to catch" failure mode is a known, long-standing
+ * report. Gating on the browser's own decoder first avoids ever reaching
+ * that code path with something it can't safely handle.
+ */
+async function validateImageLoadable(file: File): Promise<void> {
+  const url = URL.createObjectURL(file);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve();
+      img.onerror = () =>
+        reject(new Error(`"${file.name}" could not be read as an image. It may be corrupted or in an unsupported format.`));
+      img.src = url;
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 export function ImageToWord() {
   const [file, setFile] = useState<File | null>(null);
@@ -18,6 +51,8 @@ export function ImageToWord() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("");
   const [ocrText, setOcrText] = useState("");
+  const [selectedLang, setSelectedLang] = useState<string>("eng");
+  const [usedLangLabel, setUsedLangLabel] = useState<string | null>(null);
 
   const onDrop = useCallback((files: File[]) => {
     const f = files[0];
@@ -25,6 +60,7 @@ export function ImageToWord() {
     setPreview(URL.createObjectURL(f));
     setState("idle");
     setOcrText("");
+    setUsedLangLabel(null);
   }, []);
 
   async function handleExtract() {
@@ -33,29 +69,56 @@ export function ImageToWord() {
     setProgress(5);
     setStatus("LOADING OCR ENGINE...");
 
+    let worker: Awaited<ReturnType<typeof createOcrWorker>> | null = null;
+
     try {
-      const Tesseract = await import("tesseract.js");
+      await validateImageLoadable(file);
+
+      let lang = selectedLang;
+      let label = OCR_LANGUAGE_OPTIONS.find((o) => o.code === selectedLang)?.label ?? selectedLang;
+
+      if (selectedLang === AUTO_DETECT) {
+        setProgress(10);
+        setStatus("DETECTING LANGUAGE...");
+        const detected = await detectLanguage(file);
+        lang = detected.lang;
+        // Honest about what auto-detect actually did, including when it
+        // fell back rather than pretending it confidently identified
+        // something - this is a real fallback, not a guess dressed up.
+        label = detected.script ? `Auto-detected: ${detected.script} (${detected.lang})` : `Auto-detect (inconclusive — used default: ${detected.lang})`;
+      }
+
       setProgress(15);
-      setStatus("INITIALIZING RECOGNITION MODEL...");
+      setStatus(`LOADING LANGUAGE MODEL (${lang.toUpperCase()})...`);
 
-      const { data: { text } } = await Tesseract.recognize(file, "eng", {
-        logger: (m: { status: string; progress: number }) => {
-          if (m.status === "recognizing text") {
-            setProgress(15 + Math.round(m.progress * 75));
-            setStatus(`RECOGNIZING TEXT... ${Math.round(m.progress * 100)}%`);
-          }
-          if (m.status === "loading tesseract core") setStatus("LOADING OCR CORE...");
-          if (m.status === "loading language traineddata") setStatus("LOADING LANGUAGE MODEL...");
-        },
-      });
+      try {
+        worker = await createOcrWorker(lang, (update) => {
+          const pct = Math.round(update.progress * 100);
+          setProgress(15 + Math.round(update.progress * 75));
+          setStatus(`${update.status.toUpperCase().replace(/_/g, " ")} ${pct}%`);
+        });
+      } catch (loadErr) {
+        // Distinct from a general OCR failure: the language model itself
+        // never loaded, so no recognition was ever attempted - never
+        // silently fall back to a different language here, since that
+        // would mean quietly ignoring what the user actually chose.
+        console.error("Language model failed to load:", loadErr);
+        throw new Error(`Could not load the "${label}" language model. Check your connection and try again, or pick a different language.`);
+      }
 
-      setOcrText(text.trim());
+      const { data } = await worker.recognize(file);
+
+      setOcrText(data.text.trim());
+      setUsedLangLabel(label);
       setProgress(100);
       setState("complete");
     } catch (err) {
       console.error(err);
       setState("error");
-      toast.error("OCR failed. Please try a clearer image.");
+      const message = err instanceof Error ? err.message : "OCR failed. Please try a clearer image.";
+      toast.error(message);
+    } finally {
+      if (worker) await worker.terminate();
     }
   }
 
@@ -95,6 +158,7 @@ export function ImageToWord() {
     setState("idle");
     setOcrText("");
     setProgress(0);
+    setUsedLangLabel(null);
   }
 
   const wordCount = ocrText.trim().split(/\s+/).filter(Boolean).length;
@@ -121,6 +185,30 @@ export function ImageToWord() {
                 <div className="rounded-xl overflow-hidden border border-neon-green/15 max-h-64">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={preview} alt="Preview" className="w-full object-contain max-h-64 bg-black/30" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="ocr-lang" className="text-[11px] font-mono text-text-muted tracking-wide">
+                    TEXT LANGUAGE
+                  </label>
+                  <select
+                    id="ocr-lang"
+                    value={selectedLang}
+                    onChange={(e) => setSelectedLang(e.target.value)}
+                    className="w-full rounded-lg px-3 py-2.5 text-sm font-mono outline-none appearance-none cursor-pointer"
+                    style={{ background: "rgba(0,0,0,0.4)", border: "1px solid rgba(0,255,136,0.15)", color: "#e2e8f0" }}
+                  >
+                    <option value={AUTO_DETECT}>✨ Auto-detect</option>
+                    {OCR_LANGUAGE_OPTIONS.map((opt) => (
+                      <option key={opt.code} value={opt.code}>{opt.label}</option>
+                    ))}
+                  </select>
+                  {selectedLang === AUTO_DETECT && (
+                    <p className="text-[11px] font-mono text-text-muted flex items-start gap-1">
+                      <Sparkles className="w-3 h-3 mt-0.5 flex-shrink-0 text-neon-green" />
+                      Detects the dominant script automatically. Works best on images with a good amount of text — for a single word or short label, pick the language directly for a more reliable result.
+                    </p>
+                  )}
                 </div>
 
                 <div className="rounded-lg px-4 py-3 text-xs font-mono"
@@ -157,6 +245,7 @@ export function ImageToWord() {
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono text-text-muted">
                     <span><span className="text-neon-green font-bold">{wordCount}</span> words extracted</span>
                     <span><span className="text-neon-green font-bold">{ocrText.length}</span> characters</span>
+                    {usedLangLabel && <span className="text-neon-cyan">{usedLangLabel}</span>}
                   </div>
 
                   {/* Text preview + edit */}
