@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanText, Copy, Download, Sparkles } from "lucide-react";
+import { ScanText, Copy, Download, Sparkles, AlertTriangle } from "lucide-react";
 import { UploadZone } from "@/components/tools/UploadZone";
 import { CyberScanner } from "@/components/animations/CyberScanner";
 import { ResultReveal } from "@/components/tools/ResultReveal";
@@ -11,7 +11,10 @@ import { createOcrWorker, detectLanguage, OCR_LANGUAGE_OPTIONS } from "@/lib/ocr
 import { toast } from "sonner";
 
 type ProcessState = "idle" | "processing" | "complete" | "error";
-const AUTO_DETECT = "auto";
+/** Lifecycle of the automatic on-upload language detection - distinct from
+ *  ProcessState above, since detection now happens before extraction even
+ *  starts, not as part of it. */
+type DetectionState = "idle" | "detecting" | "detected" | "inconclusive" | "invalid";
 
 /**
  * Confirms a file is genuinely decodable image data using the browser's
@@ -51,8 +54,11 @@ export function ImageToWord() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("");
   const [ocrText, setOcrText] = useState("");
-  const [selectedLang, setSelectedLang] = useState<string>("eng");
+  const [selectedLang, setSelectedLang] = useState<string>("");
   const [usedLangLabel, setUsedLangLabel] = useState<string | null>(null);
+  const [detectionState, setDetectionState] = useState<DetectionState>("idle");
+  const [detectedScript, setDetectedScript] = useState<string | null>(null);
+  const [userOverrode, setUserOverrode] = useState(false);
 
   const onDrop = useCallback((files: File[]) => {
     const f = files[0];
@@ -63,8 +69,64 @@ export function ImageToWord() {
     setUsedLangLabel(null);
   }, []);
 
+  // Automatic language detection: starts the moment a file is uploaded,
+  // with no user action required. Never silently resolves to English (or
+  // anything else) when detection can't confidently identify a language -
+  // selectedLang stays "" in that case, which the UI below treats as "not
+  // yet resolved" and requires the user to choose before extraction.
+  useEffect(() => {
+    if (!file) {
+      setDetectionState("idle");
+      setDetectedScript(null);
+      setUserOverrode(false);
+      setSelectedLang("");
+      return;
+    }
+
+    let cancelled = false;
+    setDetectionState("detecting");
+    setDetectedScript(null);
+    setUserOverrode(false);
+    setSelectedLang("");
+
+    (async () => {
+      try {
+        // Same browser-decoder gate used before extraction (see
+        // validateImageLoadable below) - detection also calls into
+        // Tesseract's OSD worker, which has the identical crash-on-
+        // malformed-input exposure recognize() does, so it needs the
+        // same protection, not just the extraction path.
+        await validateImageLoadable(file);
+        if (cancelled) return;
+
+        const detected = await detectLanguage(file);
+        if (cancelled) return;
+
+        if (detected.script) {
+          setSelectedLang(detected.lang);
+          setDetectedScript(detected.script);
+          setDetectionState("detected");
+        } else {
+          // Inconclusive - a real, distinct state, not a fallback language.
+          setDetectedScript(null);
+          setDetectionState("inconclusive");
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Image validation/detection failed:", err);
+        setDetectionState("invalid");
+        setDetectedScript(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [file]);
+
   async function handleExtract() {
     if (!file) { toast.error("Please upload an image first."); return; }
+    if (!selectedLang) { toast.error("Please select a language before extracting."); return; }
     setState("processing");
     setProgress(5);
     setStatus("LOADING OCR ENGINE...");
@@ -74,19 +136,12 @@ export function ImageToWord() {
     try {
       await validateImageLoadable(file);
 
-      let lang = selectedLang;
-      let label = OCR_LANGUAGE_OPTIONS.find((o) => o.code === selectedLang)?.label ?? selectedLang;
-
-      if (selectedLang === AUTO_DETECT) {
-        setProgress(10);
-        setStatus("DETECTING LANGUAGE...");
-        const detected = await detectLanguage(file);
-        lang = detected.lang;
-        // Honest about what auto-detect actually did, including when it
-        // fell back rather than pretending it confidently identified
-        // something - this is a real fallback, not a guess dressed up.
-        label = detected.script ? `Auto-detected: ${detected.script} (${detected.lang})` : `Auto-detect (inconclusive — used default: ${detected.lang})`;
-      }
+      const lang = selectedLang;
+      const optionLabel = OCR_LANGUAGE_OPTIONS.find((o) => o.code === selectedLang)?.label ?? selectedLang;
+      // Honest in the result about whether this was auto-detected or the
+      // user's own choice - never presented as one when it was the other.
+      const label =
+        detectionState === "detected" && !userOverrode ? `Auto-detected: ${optionLabel}` : optionLabel;
 
       setProgress(15);
       setStatus(`LOADING LANGUAGE MODEL (${lang.toUpperCase()})...`);
@@ -103,7 +158,7 @@ export function ImageToWord() {
         // silently fall back to a different language here, since that
         // would mean quietly ignoring what the user actually chose.
         console.error("Language model failed to load:", loadErr);
-        throw new Error(`Could not load the "${label}" language model. Check your connection and try again, or pick a different language.`);
+        throw new Error(`Could not load the "${optionLabel}" language model. Check your connection and try again, or pick a different language.`);
       }
 
       const { data } = await worker.recognize(file);
@@ -159,6 +214,10 @@ export function ImageToWord() {
     setOcrText("");
     setProgress(0);
     setUsedLangLabel(null);
+    setSelectedLang("");
+    setDetectionState("idle");
+    setDetectedScript(null);
+    setUserOverrode(false);
   }
 
   const wordCount = ocrText.trim().split(/\s+/).filter(Boolean).length;
@@ -188,25 +247,67 @@ export function ImageToWord() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label htmlFor="ocr-lang" className="text-[11px] font-mono text-text-muted tracking-wide">
+                  <label htmlFor="ocr-lang" className="text-[11px] font-mono text-text-muted tracking-wide flex items-center gap-1.5">
                     TEXT LANGUAGE
+                    {detectionState === "detecting" && (
+                      <span className="text-neon-cyan inline-flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 animate-pulse" /> detecting…
+                      </span>
+                    )}
+                    {detectionState === "detected" && !userOverrode && (
+                      <span className="text-neon-green inline-flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> auto-detected — review or change below
+                      </span>
+                    )}
                   </label>
                   <select
                     id="ocr-lang"
                     value={selectedLang}
-                    onChange={(e) => setSelectedLang(e.target.value)}
-                    className="w-full rounded-lg px-3 py-2.5 text-sm font-mono outline-none appearance-none cursor-pointer"
-                    style={{ background: "rgba(0,0,0,0.4)", border: "1px solid rgba(0,255,136,0.15)", color: "#e2e8f0" }}
+                    onChange={(e) => { setSelectedLang(e.target.value); setUserOverrode(true); }}
+                    disabled={detectionState === "detecting" || detectionState === "invalid"}
+                    className="w-full rounded-lg px-3 py-2.5 text-sm font-mono outline-none appearance-none cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      background: "rgba(0,0,0,0.4)",
+                      color: "#e2e8f0",
+                      border:
+                        detectionState === "detected" && !userOverrode
+                          ? "1px solid rgba(0,255,136,0.65)"
+                          : detectionState === "inconclusive"
+                          ? "1px solid rgba(255,204,0,0.65)"
+                          : "1px solid rgba(0,255,136,0.15)",
+                      boxShadow: detectionState === "detected" && !userOverrode ? "0 0 14px rgba(0,255,136,0.25)" : "none",
+                    }}
                   >
-                    <option value={AUTO_DETECT}>✨ Auto-detect</option>
+                    {selectedLang === "" && (
+                      <option value="" disabled>
+                        {detectionState === "detecting"
+                          ? "Detecting language…"
+                          : detectionState === "inconclusive"
+                          ? "⚠ Not detected — choose a language"
+                          : "Select a language"}
+                      </option>
+                    )}
                     {OCR_LANGUAGE_OPTIONS.map((opt) => (
                       <option key={opt.code} value={opt.code}>{opt.label}</option>
                     ))}
                   </select>
-                  {selectedLang === AUTO_DETECT && (
-                    <p className="text-[11px] font-mono text-text-muted flex items-start gap-1">
-                      <Sparkles className="w-3 h-3 mt-0.5 flex-shrink-0 text-neon-green" />
-                      Detects the dominant script automatically. Works best on images with a good amount of text — for a single word or short label, pick the language directly for a more reliable result.
+
+                  {detectionState === "detected" && !userOverrode && detectedScript && (
+                    <p className="text-[11px] font-mono text-neon-green flex items-start gap-1">
+                      <Sparkles className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      Detected script: {detectedScript}. Not right? Just pick a different language above.
+                    </p>
+                  )}
+                  {detectionState === "inconclusive" && (
+                    <p className="text-[11px] font-mono text-neon-yellow flex items-start gap-1">
+                      <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      Couldn&apos;t confidently detect the language — this can happen with short or sparse text. Please choose the language above before extracting.
+                    </p>
+                  )}
+                  {detectionState === "invalid" && (
+                    <p className="text-[11px] font-mono text-neon-red flex items-start gap-1">
+                      <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      This file couldn&apos;t be read as an image. Try a different file.
                     </p>
                   )}
                 </div>
@@ -218,9 +319,10 @@ export function ImageToWord() {
                 </div>
 
                 <button onClick={handleExtract}
-                  className="w-full btn-neon-green py-3.5 flex items-center justify-center gap-2 font-mono font-bold tracking-widest text-sm">
+                  disabled={!selectedLang || detectionState === "detecting" || detectionState === "invalid"}
+                  className="w-full btn-neon-green py-3.5 flex items-center justify-center gap-2 font-mono font-bold tracking-widest text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                   <ScanText className="w-4 h-4" />
-                  EXTRACT TEXT (OCR)
+                  {detectionState === "detecting" ? "DETECTING LANGUAGE…" : "EXTRACT TEXT (OCR)"}
                 </button>
               </motion.div>
             )}
