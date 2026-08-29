@@ -34,6 +34,23 @@ Open [http://localhost:3000/admin](http://localhost:3000/admin) for the admin pa
 
 ---
 
+## Development Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start the development server |
+| `npm run build` | Create a production build |
+| `npm run start` | Start the production server (run `build` first) |
+| `npm run lint` | Run ESLint |
+| `npx tsc --noEmit` | Type-check the project without emitting output files |
+| `npm run db:generate` | Regenerate the Prisma client from `schema.prisma` |
+| `npm run db:push` | Push the Prisma schema to the database directly (no migration history) |
+| `npm run db:migrate` | Create and apply a new Prisma migration |
+| `npm run db:seed` | Seed the database with initial data (`prisma/seed.ts`) |
+| `npm run db:studio` | Open Prisma Studio to browse/edit the database |
+
+---
+
 ## Prerequisites
 
 - Node.js 20+
@@ -108,7 +125,7 @@ toolsbar-v2/
 | PDF Split | Hybrid (browser + server fallback) | pdf-lib + pdfjs-dist |
 | PDF Merge | Browser | pdf-lib |
 | PDF Compress | Browser | pdfjs-dist + jspdf |
-| PDF to Text | Browser | pdfjs-dist |
+| PDF to Text | Browser (+ OCR fallback for scanned/corrupted pages) | pdfjs-dist + tesseract.js |
 
 ### Image Tools
 | Tool | Processing | Library |
@@ -116,7 +133,7 @@ toolsbar-v2/
 | Image Compressor | Browser | Canvas API |
 | Image Converter | Browser | Canvas API |
 | Image to PDF | Browser | jspdf |
-| Image to Word (OCR) | Browser | tesseract.js + docx |
+| Image to Word (OCR) | Browser | tesseract.js + docx (32 languages, auto-detected) |
 
 ### Text Tools
 | Tool | Processing | Library |
@@ -134,7 +151,7 @@ toolsbar-v2/
 ### Developer Tools
 | Tool | Processing | Library |
 |------|-----------|---------|
-| CodePack Builder | Browser | jszip |
+| CodePack Builder | Browser | jszip (build from scratch, or paste an architecture to generate one) |
 | QR Scanner | Browser | html5-qrcode |
 
 ---
@@ -196,6 +213,16 @@ After AdSense approval:
    - `app/(marketing)/page.tsx` (homepage)
    - `app/(tools)/tools/[slug]/page.tsx` (tool pages)
    - Blog pages
+
+---
+
+## Troubleshooting
+
+**`prisma generate` fails to download engine binaries (during `npm install`)**
+`npm install` runs `prisma generate` automatically via `postinstall`, which needs to download Prisma's query/schema engine binaries from `binaries.prisma.sh`. In a network-restricted environment (corporate proxy, locked-down CI runner, some Docker build setups), this fails with a `403` or timeout, and `db:*` commands plus any Prisma-backed page will error until it succeeds. If you're behind a proxy, set `HTTP_PROXY`/`HTTPS_PROXY`; if that domain is blocked outright, host the engine files yourself and point `PRISMA_ENGINES_MIRROR` at them — see [Prisma's environment variables reference](https://www.prisma.io/docs/orm/v6/reference/environment-variables-reference).
+
+**`next build` (or first `next dev` request) fails with "Failed to fetch font `Inter`"**
+The root layout loads the Inter font via `next/font/google`, which needs network access to `fonts.googleapis.com` at build time. This fails for the same reason as above in a network-restricted build environment. Confirm that domain is reachable from wherever you're running the build.
 
 ---
 

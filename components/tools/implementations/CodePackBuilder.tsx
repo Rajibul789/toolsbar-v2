@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { PackageOpen, Plus, Trash2, FolderOpen, FileCode, ChevronRight, ChevronDown, FilePlus, FolderPlus, ClipboardPaste, Hammer, FileWarning } from "lucide-react";
+import { PackageOpen, Plus, Trash2, FolderOpen, FileCode, ChevronRight, ChevronDown, FilePlus, FolderPlus, ClipboardPaste, Hammer, FileWarning, Pencil } from "lucide-react";
 import { downloadBlob } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -195,6 +195,22 @@ export function CodePackBuilder() {
     if (toDelete.has(selectedId)) setSelectedId("");
   }
 
+  function renameNode(id: string) {
+    const node = nodes.find((n) => n.id === id);
+    if (!node) return;
+    const name = prompt(`Rename "${node.name}" to:`, node.name);
+    if (!name?.trim() || name.trim() === node.name) return;
+    const trimmed = name.trim();
+    if (nodes.some((n) => n.parentId === node.parentId && n.id !== id && n.name === trimmed)) {
+      toast.error(`"${trimmed}" already exists in this folder.`);
+      return;
+    }
+    // Only the name field changes - parentId (and therefore the whole
+    // hierarchy) is untouched, so this preserves the tree structure by
+    // construction rather than needing separate hierarchy-preserving logic.
+    setNodes((prev) => prev.map((n) => n.id === id ? { ...n, name: trimmed } : n));
+  }
+
   function updateContent(id: string, content: string) {
     setNodes((prev) => prev.map((n) => n.id === id && n.type === "file" ? { ...n, content } : n));
   }
@@ -308,6 +324,13 @@ export function CodePackBuilder() {
               </button>
             </>
           )}
+          <button
+            onClick={(e) => { e.stopPropagation(); renameNode(node.id); }}
+            className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-text-muted hover:text-neon-cyan transition-all flex-shrink-0"
+            title="Rename"
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); deleteNode(node.id); }}
             className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-text-muted hover:text-neon-red transition-all flex-shrink-0"
