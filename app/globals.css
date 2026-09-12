@@ -722,3 +722,73 @@
     animation: none;
   }
 }
+
+/* ────────────────────────────────────────────────
+   @uiw/react-md-editor toolbar — larger touch targets
+   The library's default buttons are sized for desktop mouse
+   use (~small, tightly packed). Text to PDF is used mostly on
+   mobile, so bump button/icon size and spacing here rather than
+   forking the component. Selectors confirmed against the
+   installed package's actual rendered markup:
+     .w-md-editor-toolbar ul > li > button   (every toolbar button,
+       default commands and our custom ones alike — each carries
+       a data-name attribute equal to the command name)
+     .w-md-editor-toolbar-child               (dropdown/group popups,
+       e.g. headings, highlight/color swatch groups, alignment)
+     .w-md-editor-text-input                  (the underlying textarea)
+   ──────────────────────────────────────────────── */
+.w-md-editor-toolbar {
+  padding: 6px 4px;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.w-md-editor-toolbar ul {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.w-md-editor-toolbar ul > li > button {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 6px;
+  margin: 0 1px;
+  border-radius: 6px;
+}
+
+.w-md-editor-toolbar ul > li > button svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* A little breathing room around the most-used controls so an
+   adjacent tap doesn't land on the wrong button on a small screen. */
+.w-md-editor-toolbar ul > li:first-child > button,
+.w-md-editor-toolbar ul > li[data-name="bold"] > button,
+.w-md-editor-toolbar ul > li[data-name="italic"] > button,
+.w-md-editor-toolbar ul > li[data-name="underline"] > button,
+.w-md-editor-toolbar ul > li[data-name="link"] > button {
+  margin: 0 2px;
+}
+
+.w-md-editor-toolbar-child {
+  min-width: 160px;
+  max-width: min(320px, 92vw);
+  z-index: 50;
+}
+
+.w-md-editor-toolbar-child ul {
+  flex-wrap: wrap;
+}
+
+.w-md-editor-toolbar-child li > button {
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
+@media (max-width: 480px) {
+  .w-md-editor-text-input,
+  .w-md-editor-text {
+    font-size: 15px !important;
+  }
+}

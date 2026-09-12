@@ -429,9 +429,19 @@ export const TOOLS_CONFIG: ToolConfig[] = [
           "Yes — your content is auto-saved to your browser's localStorage every 30 seconds.",
       },
       {
-        question: "What Markdown features are supported?",
+        question: "What formatting is supported?",
         answer:
-          "Headings, bold, italic, underline, tables, ordered and unordered lists, code blocks, blockquotes, and hyperlinks.",
+          "Headings, bold, italic, underline, strikethrough, highlight, text color, superscript/subscript, tables, ordered/unordered/checklist lists, blockquotes, code blocks, alignment, manual page breaks, and hyperlinks — all from the toolbar, no Markdown syntax required.",
+      },
+      {
+        question: "Do the links in my PDF actually work?",
+        answer:
+          "Yes — links are exported as real clickable PDF link annotations, not just blue-colored text, so they open the URL in any PDF viewer.",
+      },
+      {
+        question: "What font does the PDF use?",
+        answer:
+          "Lora by default — a serif font suited to long-form reading — with Inter (sans-serif) and JetBrains Mono (monospace) also available. All three are embedded directly in the PDF, so text stays sharp and selectable at any zoom level.",
       },
     ],
   },
