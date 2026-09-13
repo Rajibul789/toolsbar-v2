@@ -474,7 +474,7 @@
   .prose-cyber h2 { font-size: 1.5rem; border-bottom: 1px solid rgba(0,245,255,0.15); padding-bottom: 0.5rem; }
   .prose-cyber h3 { font-size: 1.25rem; color: var(--text-primary); }
 
-  .prose-cyber p { margin-bottom: 1.25rem; color: var(--text-secondary); }
+  .prose-cyber p { margin-bottom: 1.25rem; color: var(--text-secondary); white-space: pre-wrap; }
   .prose-cyber strong { color: var(--text-primary); }
   .prose-cyber em { color: var(--neon-cyan); font-style: italic; }
 
@@ -520,6 +520,7 @@
     margin: 1.5rem 0;
     color: var(--text-muted);
     font-style: italic;
+    white-space: pre-wrap;
   }
 
   .prose-cyber ul { list-style: none; padding-left: 0; margin-bottom: 1.25rem; }
@@ -528,6 +529,7 @@
     padding-left: 1.5rem;
     margin-bottom: 0.5rem;
     color: var(--text-secondary);
+    white-space: pre-wrap;
   }
   .prose-cyber ul li::before {
     content: "▸";
@@ -548,6 +550,7 @@
     padding-left: 2rem;
     margin-bottom: 0.5rem;
     color: var(--text-secondary);
+    white-space: pre-wrap;
   }
   .prose-cyber ol li::before {
     content: counter(list-counter) ".";

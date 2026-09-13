@@ -107,15 +107,50 @@ export async function generateMarkdownPdf(
 // handled later during inline layout by reading the literal characters
 // straight from marked's text tokens.
 
-function preprocessWhitespace(src: string): string {
-  return src.replace(/\n{3,}/g, (match) => {
-    // match is N newlines => (N-1) blank lines between two content lines.
-    // The first newline plus one more (\n\n) is the normal single
-    // paragraph break; every additional \n beyond that is one extra blank
-    // line the user intentionally left.
+/**
+ * Exported (not just used internally) because it must also run on the
+ * content fed into the live preview — otherwise "3 blank lines get extra
+ * gap" (or forced line breaks) would be true in the exported PDF but false
+ * in the editor's own preview, which is exactly the mismatch Part 2 exists
+ * to eliminate. See TextToPdf.tsx's previewSource.
+ *
+ * Deliberately dependency-free: forced line breaks are produced using
+ * CommonMark's own standard hard-break syntax (two trailing spaces before
+ * a newline) rather than a plugin like remark-breaks. Both marked (this
+ * file's PDF path) and vanilla remark/react-markdown (the live preview,
+ * with no extra plugin) already recognize that syntax natively — verified
+ * directly against both parsers before relying on it. That avoids the
+ * class of bug where a preview-only plugin dependency turns out not to be
+ * genuinely installed in the real project, only listed as intended.
+ *
+ * Code-fence–aware: content inside ``` fenced code blocks ``` is left
+ * completely untouched, so this never injects trailing spaces into the
+ * user's literal code.
+ */
+export function preprocessWhitespace(src: string): string {
+  const segments = src.split(/(```[\s\S]*?```)/g);
+  return segments
+    .map((seg, i) => (i % 2 === 1 ? seg : preprocessProseSegment(seg)))
+    .join("");
+}
+
+function preprocessProseSegment(seg: string): string {
+  // 1. Collapse runs of 3+ newlines into a normal paragraph break plus an
+  //    explicit, visible spacer marker for every EXTRA blank line beyond
+  //    the first (a run of N newlines = N-1 blank lines; one blank line is
+  //    the ordinary paragraph gap, so N-2 markers cover the rest).
+  let out = seg.replace(/\n{3,}/g, (match) => {
     const extra = match.length - 2;
-    return "\n\n" + '<div class="pdf-blank-line"></div>\n\n'.repeat(extra);
+    // The inline height is what makes this marker actually visible in the
+    // browser preview (an empty <div> with no content and no height
+    // collapses to zero); the PDF renderer only checks the class name, so
+    // the style attribute is harmless there.
+    return "\n\n" + '<div class="pdf-blank-line" style="height:1em"></div>\n\n'.repeat(extra);
   });
+  // 2. Every remaining lone single newline (not part of a \n\n paragraph
+  //    break) becomes a real hard break via CommonMark's own syntax.
+  out = out.replace(/(?<!\n)\n(?!\n)/g, "  \n");
+  return out;
 }
 
 // marked's inline tokenizer HTML-entity-escapes plain text as it

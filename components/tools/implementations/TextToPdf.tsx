@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { FileEdit, Eye, Download, Save, RotateCcw, Type, Underline as UnderlineIcon } from "lucide-react";
 import { toast } from "sonner";
 import { downloadBlob } from "@/lib/utils";
 import dynamic from "next/dynamic";
 import rehypeRaw from "rehype-raw";
-import { generateMarkdownPdf } from "@/lib/markdown-pdf";
+import { generateMarkdownPdf, preprocessWhitespace } from "@/lib/markdown-pdf";
 import type { ICommand } from "@uiw/react-md-editor";
 
 // Lazy-load the heavy editor
@@ -163,6 +163,15 @@ export function TextToPdf() {
 
   const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
 
+  // PART 2 FIX: the preview must go through the exact same whitespace
+  // preprocessing as the PDF export — otherwise "3 blank lines = extra
+  // gap" or "a line break stays a line break" could be true in the PDF
+  // but false in the editor's own preview, which is the mismatch Part 2
+  // exists to prevent. preprocessWhitespace (lib/markdown-pdf.ts) now
+  // handles line breaks via CommonMark's own hard-break syntax, so no
+  // extra remark plugin/dependency is needed here for it to work.
+  const previewSource = useMemo(() => preprocessWhitespace(content), [content]);
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
@@ -240,7 +249,11 @@ export function TextToPdf() {
               data-color-mode="dark">
               {MarkdownPreview ? (
                 <div className="prose-cyber">
-                  <MarkdownPreview source={content} style={{ background: "transparent", color: "#e2e8f0" }} rehypePlugins={[rehypeRaw]} />
+                  <MarkdownPreview
+                    source={previewSource}
+                    style={{ background: "transparent", color: "#e2e8f0" }}
+                    rehypePlugins={[rehypeRaw]}
+                  />
                 </div>
               ) : (
                 <pre className="text-xs text-text-muted whitespace-pre-wrap">{content}</pre>
