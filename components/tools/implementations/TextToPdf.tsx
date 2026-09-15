@@ -8,6 +8,7 @@ import { downloadBlob } from "@/lib/utils";
 import dynamic from "next/dynamic";
 import rehypeRaw from "rehype-raw";
 import { generateMarkdownPdf, preprocessWhitespace } from "@/lib/markdown-pdf";
+import { PDF_FONT_LABELS, type PdfFontFamily } from "@/lib/pdf-fonts";
 import type { ICommand } from "@uiw/react-md-editor";
 
 // Lazy-load the heavy editor
@@ -71,6 +72,7 @@ export function TextToPdf() {
   const [content, setContent]     = useState(DEFAULT_CONTENT);
   const [viewMode, setViewMode]   = useState<ViewMode>("split");
   const [pageSize, setPageSize]   = useState<PageSize>("a4");
+  const [fontFamily, setFontFamily] = useState<PdfFontFamily>("lora");
   const [fontSize, setFontSize]   = useState(12);
   const [isExporting, setIsExporting] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -146,7 +148,7 @@ export function TextToPdf() {
     if (!content.trim()) { toast.error("Nothing to export!"); return; }
     setIsExporting(true);
     try {
-      const { blob, pageCount } = await generateMarkdownPdf(content, { pageSize, fontSize });
+      const { blob, pageCount } = await generateMarkdownPdf(content, { pageSize, fontFamily, fontSize });
       downloadBlob(blob, "document.pdf");
       toast.success(`PDF exported — ${pageCount} page${pageCount === 1 ? "" : "s"}`);
     } catch (err) {
@@ -264,20 +266,42 @@ export function TextToPdf() {
       </div>
 
       {/* Export settings */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-2">Page Size</label>
           <div className="flex gap-2">
             {(["a4", "letter"] as PageSize[]).map((s) => (
               <button key={s} onClick={() => setPageSize(s)}
-                className="flex-1 py-2 text-xs font-mono rounded-lg border transition-all uppercase"
+                className="flex-1 py-2.5 text-xs font-mono rounded-lg border transition-all uppercase"
                 style={{
                   background: pageSize === s ? "rgba(0,245,255,0.1)" : "transparent",
                   borderColor: pageSize === s ? "rgba(0,245,255,0.4)" : "rgba(0,245,255,0.1)",
                   color: pageSize === s ? "#00f5ff" : "#475569",
+                  minHeight: 40,
                 }}>{s}</button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-2">Font</label>
+          <div className="flex gap-2">
+            {(Object.keys(PDF_FONT_LABELS) as PdfFontFamily[]).map((f) => (
+              <button key={f} onClick={() => setFontFamily(f)}
+                className="flex-1 py-2.5 text-[11px] font-mono rounded-lg border transition-all"
+                style={{
+                  background: fontFamily === f ? "rgba(0,245,255,0.1)" : "transparent",
+                  borderColor: fontFamily === f ? "rgba(0,245,255,0.4)" : "rgba(0,245,255,0.1)",
+                  color: fontFamily === f ? "#00f5ff" : "#475569",
+                  minHeight: 40,
+                }}
+                title={PDF_FONT_LABELS[f].description}
+              >{PDF_FONT_LABELS[f].label}</button>
+            ))}
+          </div>
+          <p className="text-[10px] font-mono text-text-muted/60 mt-1.5">
+            Bengali text uses Noto Sans Bengali automatically, regardless of this choice.
+          </p>
         </div>
 
         <div>
