@@ -1,32 +1,18 @@
 /**
  * lib/pdf-fonts.ts
  *
- * Embeds real, licensed TTF fonts (already shipped in /public/fonts for the
- * site's own UI) into a jsPDF document as genuine vector fonts, AND loads
- * the Bengali font as a browser FontFace for a different purpose — see the
- * long comment in markdown-pdf.ts's Bengali handling for why Bengali can't
- * use the same vector-text path as everything else.
- *
- * Why these families: Lora (serif), Inter (sans), and JetBrains Mono
- * (monospace) are the only fonts the project already ships as static TTF
- * files. Lora is a serif book font intended for long-form reading, never
- * wired into next/font or any stylesheet before Part 3 — the natural
- * "document" default. Inter is the site's existing UI sans-serif. All
- * three are OFL-licensed.
- *
- * Fonts NOT in this list (Georgia, Arial, Times New Roman, etc.) cannot be
- * embedded — there are no licensed TTF files for them, and jsPDF cannot
- * fabricate glyphs. Offering them as "supported" would silently produce
- * wrong output.
+ * Embeds Lora (the tool's fixed default — see markdown-pdf.ts) and
+ * JetBrains Mono (used for code regardless of body font) as real vector
+ * fonts in the PDF, and provides the data needed to decide, character by
+ * character, whether the embedded font can actually render a given
+ * codepoint — see the coverage-range section below. That decision is what
+ * lets the rest of the system stay genuinely language-agnostic: nothing
+ * here checks "is this Bengali" or names any specific script or language.
+ * It only ever asks "is this codepoint in the font we embedded," which is
+ * true or false the same way for every script.
  */
 
 export type PdfFontFamily = "lora" | "inter" | "jetbrains-mono";
-
-export const PDF_FONT_LABELS: Record<PdfFontFamily, { label: string; description: string }> = {
-  lora: { label: "Lora (Serif)", description: "Default — built for long-form reading" },
-  inter: { label: "Inter (Sans)", description: "Clean, modern — matches the site UI" },
-  "jetbrains-mono": { label: "JetBrains Mono", description: "Fixed-width, technical documents" },
-};
 
 const FONT_FILES: Record<PdfFontFamily, { normal: string; bold: string; italic: string; bolditalic: string }> = {
   lora: {
@@ -58,7 +44,7 @@ const FONT_IDS: Record<PdfFontFamily, string> = {
 };
 
 /** Monospace family, used for inline code / code blocks regardless of the
- *  document's chosen body font. */
+ *  document's body font. */
 export const MONO_FONT_FAMILY: PdfFontFamily = "jetbrains-mono";
 
 const fetchCache = new Map<string, Promise<ArrayBuffer>>();
@@ -93,10 +79,8 @@ async function fetchFontBase64(filename: string): Promise<string> {
   return arrayBufferToBase64(await fetchFontBuffer(filename));
 }
 
-/**
- * Fetches and embeds one font family's four style variants into the given
- * jsPDF document as genuine vector fonts.
- */
+/** Fetches and embeds one font family's four style variants into the
+ *  given jsPDF document as genuine vector fonts. */
 export async function registerPdfFont(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   pdf: any,
@@ -124,11 +108,9 @@ export async function registerPdfFont(
   return { id };
 }
 
-/**
- * Registers the chosen body font plus (if different) the mono font used
- * for code, as real embedded vector fonts. Returns the jsPDF font-id to
- * use for each role.
- */
+/** Registers the body font plus (if different) the mono font used for
+ *  code, as real embedded vector fonts. Returns the jsPDF font-id to use
+ *  for each role. */
 export async function registerDocumentFonts(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   pdf: any,
@@ -140,55 +122,79 @@ export async function registerDocumentFonts(
   return { bodyFontId: body.id, monoFontId: mono.id };
 }
 
-// ───────────────────────── Bengali (canvas path) ─────────────────────────
+// ───────────────────────── Universal Unicode fallback ─────────────────────────
 //
-// See markdown-pdf.ts for the full explanation of why Bengali text is
-// rendered via canvas rather than jsPDF's vector text API. In short:
-// Bengali requires OpenType script shaping (reordering pre-base vowel
-// signs, forming conjunct ligatures) that jsPDF's simple cmap-based
-// text() does not perform — confirmed by direct visual test, where
-// embedding the correct font still produced visibly wrong glyph order
-// and missing conjuncts. A browser's own <canvas> 2D text rendering does
-// perform real shaping (it's the same engine used for on-page text), so
-// Bengali runs are rasterized through that instead of drawn as vector
-// text, and placed into the PDF as a small image.
-const BENGALI_FONT_FILES = { normal: "NotoSansBengali-Regular.ttf", bold: "NotoSansBengali-Bold.ttf" };
-const BENGALI_FAMILY_NAME = "TB-NotoSansBengali";
-let bengaliFontsLoadedPromise: Promise<void> | null = null;
+// The embedded fonts above are subsetted TTFs (~226-230 glyphs each) that
+// cover Latin text, Western European accented characters, and common
+// typographic punctuation — not the full range of scripts a person might
+// paste into a text editor. Rather than bundling a specific font for a
+// specific language (which only ever covers the languages someone
+// remembered to name), every codepoint is checked against what the
+// embedded font actually contains. Anything outside that coverage is
+// rendered through a separate path (see markdown-pdf.ts) that uses the
+// browser's own font stack, so whatever script it is, the browser's own
+// installed fonts and text-shaping engine handle it — the same way any
+// other web page displays that language correctly. That works for any
+// script the browser and device can display, not a preset list.
+//
+// COVERAGE_RANGES below is generated directly from each embedded TTF's
+// own cmap table (which codepoints it actually contains), not typed by
+// hand and not a guess.
 
-/**
- * Loads the Bengali font as a browser FontFace usable by <canvas> (and by
- * regular DOM text, incidentally — but this tool only needs the canvas
- * use). Idempotent: safe to call multiple times per page.
- *
- * No italic variant exists for Noto Sans Bengali (Bengali script doesn't
- * use an italic convention the way Latin does) — bold Bengali text uses
- * the real bold face; italic Bengali text falls back to the upright
- * regular face rather than a synthetically-slanted one, which would not
- * be a real typeface design.
- */
-export function ensureBengaliFontLoaded(): Promise<void> {
-  if (bengaliFontsLoadedPromise) return bengaliFontsLoadedPromise;
-  bengaliFontsLoadedPromise = (async () => {
-    const [normalBuf, boldBuf] = await Promise.all([
-      fetchFontBuffer(BENGALI_FONT_FILES.normal),
-      fetchFontBuffer(BENGALI_FONT_FILES.bold),
-    ]);
-    const normalFace = new FontFace(BENGALI_FAMILY_NAME, normalBuf, { weight: "400" });
-    const boldFace = new FontFace(BENGALI_FAMILY_NAME, boldBuf, { weight: "700" });
-    await Promise.all([normalFace.load(), boldFace.load()]);
-    document.fonts.add(normalFace);
-    document.fonts.add(boldFace);
-  })();
-  return bengaliFontsLoadedPromise;
+const LORA_COVERAGE_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0x000d, 0x000d], [0x0020, 0x007e], [0x00a0, 0x00ac], [0x00ae, 0x00ff],
+  [0x0102, 0x0102], [0x0131, 0x0131], [0x0152, 0x0153], [0x02bb, 0x02bc],
+  [0x02c6, 0x02c6], [0x02da, 0x02da], [0x02dc, 0x02dc], [0x0300, 0x0301],
+  [0x0303, 0x0304], [0x0308, 0x0309], [0x0323, 0x0323], [0x2013, 0x2014],
+  [0x2018, 0x201a], [0x201c, 0x201e], [0x2022, 0x2022], [0x2026, 0x2026],
+  [0x2032, 0x2033], [0x2039, 0x203a], [0x2044, 0x2044], [0x20ac, 0x20ac],
+  [0x2122, 0x2122], [0x2212, 0x2212], [0x2215, 0x2215],
+];
+
+const JETBRAINS_MONO_COVERAGE_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0x000d, 0x000d], [0x0020, 0x007e], [0x00a0, 0x00ff], [0x0102, 0x0102],
+  [0x0131, 0x0131], [0x0152, 0x0153], [0x02bc, 0x02bc], [0x02c6, 0x02c6],
+  [0x02da, 0x02da], [0x02dc, 0x02dc], [0x0300, 0x0301], [0x0303, 0x0304],
+  [0x0308, 0x0309], [0x0323, 0x0323], [0x2013, 0x2014], [0x2018, 0x201a],
+  [0x201c, 0x201e], [0x2022, 0x2022], [0x2026, 0x2026], [0x2032, 0x2033],
+  [0x2039, 0x203a], [0x2044, 0x2044], [0x20ac, 0x20ac], [0x2122, 0x2122],
+  [0x2191, 0x2191], [0x2193, 0x2193], [0x2212, 0x2212], [0x2215, 0x2215],
+  [0xfeff, 0xfeff],
+];
+
+function isCoveredBy(ranges: ReadonlyArray<readonly [number, number]>, codePoint: number): boolean {
+  let lo = 0;
+  let hi = ranges.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const [start, end] = ranges[mid];
+    if (codePoint < start) hi = mid - 1;
+    else if (codePoint > end) lo = mid + 1;
+    else return true;
+  }
+  return false;
 }
 
-export const BENGALI_FONT_FAMILY_CSS = BENGALI_FAMILY_NAME;
-
-/** Bengali Unicode block (U+0980-U+09FF) covers standard Bengali/Assamese
- *  text, including digits ০-৯. */
-export function isBengaliChar(ch: string): boolean {
+/** True if the embedded body font (Lora) has a glyph for this character. */
+export function isCoveredByBodyFont(ch: string): boolean {
   const cp = ch.codePointAt(0);
-  if (cp === undefined) return false;
-  return cp >= 0x0980 && cp <= 0x09ff;
+  return cp !== undefined && isCoveredBy(LORA_COVERAGE_RANGES, cp);
 }
+
+/** True if the embedded mono font (JetBrains Mono, used for code) has a
+ *  glyph for this character. */
+export function isCoveredByMonoFont(ch: string): boolean {
+  const cp = ch.codePointAt(0);
+  return cp !== undefined && isCoveredBy(JETBRAINS_MONO_COVERAGE_RANGES, cp);
+}
+
+/** Generic CSS font stack for the canvas-rendered fallback path — no
+ *  specific language or script is named. "Noto Sans" is tried first
+ *  because, as a design goal of that font family, it aims for broad
+ *  multi-script coverage; system-ui and sans-serif fall through to
+ *  whatever the browser/OS provides for scripts Noto Sans itself doesn't
+ *  cover on this device. Actual coverage for any given script therefore
+ *  depends on the fonts available in the browser/OS, same as any web
+ *  page's text rendering — not something a bundled file can guarantee
+ *  for every possible script. */
+export const FALLBACK_FONT_CSS_STACK = '"Noto Sans", system-ui, sans-serif';

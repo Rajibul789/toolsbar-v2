@@ -1,9 +1,9 @@
 /**
  * lib/markdown-pdf.ts
- * PART 2 SCOPE ONLY — see the Part 2 report for what is deliberately not
- * here yet (font embedding/Bengali = Part 3, highlight/color/sup/sub/
- * alignment/page-break = Part 4/6, full link-workflow verification =
- * Part 6, table/pagination stress-matrix = Part 7).
+ * Font embedding + universal Unicode fallback = Part 3. Highlight/color/
+ * sup/sub/alignment/page-break = Part 4/6 (not yet built). Full
+ * link-workflow verification = Part 6. Table/pagination stress-matrix =
+ * Part 7. See the Part reports for what's deliberately not here yet.
  *
  * Renders Markdown directly to a jsPDF document using jsPDF's native
  * vector text API — NOT html2canvas + addImage, which is what the
@@ -38,14 +38,19 @@
  */
 
 import { marked, type Token, type Tokens } from "marked";
-import { registerDocumentFonts, ensureBengaliFontLoaded, isBengaliChar, BENGALI_FONT_FAMILY_CSS, type PdfFontFamily } from "./pdf-fonts";
+import { registerDocumentFonts, isCoveredByBodyFont, isCoveredByMonoFont, FALLBACK_FONT_CSS_STACK, type PdfFontFamily } from "./pdf-fonts";
 
 // ───────────────────────────── Public API ─────────────────────────────
+
+// Fixed, non-configurable body font — see the Part 3 correction notes: no
+// font-family choice is exposed anywhere in the UI. Lora was chosen as
+// this tool's intended default (see lib/pdf-fonts.ts / Part 1's audit);
+// it isn't a user-facing option.
+const FIXED_BODY_FONT: PdfFontFamily = "lora";
 
 export interface MarkdownPdfOptions {
   pageSize: "a4" | "letter";
   fontSize: number; // pt, body text base size
-  fontFamily: PdfFontFamily;
 }
 
 export interface MarkdownPdfResult {
@@ -67,14 +72,11 @@ export async function generateMarkdownPdf(
 
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: options.pageSize });
 
-  // Real embedded vector fonts (Part 3) — replaces Part 2's jsPDF-builtin
-  // placeholder. The Bengali font loads separately, as a browser FontFace
-  // rather than a jsPDF vector font — see the Bengali section below and
-  // pdf-fonts.ts for why. Both run in parallel since they're independent.
-  const [{ bodyFontId, monoFontId }] = await Promise.all([
-    registerDocumentFonts(pdf, options.fontFamily),
-    ensureBengaliFontLoaded(),
-  ]);
+  // Real embedded vector fonts for the fixed default family. Any
+  // character these fonts don't cover falls back to the browser's own
+  // font stack instead (see the "Universal Unicode fallback" section
+  // below) — no per-script font loading, no language-specific step here.
+  const { bodyFontId, monoFontId } = await registerDocumentFonts(pdf, FIXED_BODY_FONT);
 
   const ctx: Ctx = {
     pdf,
@@ -223,66 +225,83 @@ function ensureSpace(ctx: Ctx, neededMm: number) {
   }
 }
 
-// ───────────────────────── Bengali (canvas-rendered) ─────────────────────────
+// ───────────────────── Universal Unicode fallback (canvas-rendered) ─────────────────────
 //
-// Bengali script needs real OpenType shaping to render correctly: certain
-// vowel signs are stored after their consonant in Unicode text order but
-// must display *before* it, and sequences of consonants commonly combine
-// into a single conjunct ligature glyph. jsPDF's text API does neither —
-// it maps each character straight to a glyph via the font's cmap, so even
-// with a correct, fully-covered Bengali font embedded, output for real
-// Bengali sentences renders with vowel signs in the wrong position, plus
-// missing/incorrect conjuncts. Confirmed directly: rendering a real
-// Bengali sentence that way, then reading the result, shows exactly that.
+// The embedded vector fonts (see pdf-fonts.ts) only cover Latin text and
+// common Western punctuation. Two different problems show up for anything
+// outside that:
 //
-// A browser's own <canvas> 2D text rendering does perform real shaping —
-// it's the same text engine the page itself uses — so Bengali runs are
-// rasterized through that and placed into the PDF as a small image
-// instead of being drawn as vector glyphs. Confirmed correct by the same
-// method: rendering real Bengali sentences this way and reading the
-// result. The tradeoff is real and is reported as such: Bengali text in
-// the exported PDF is an image, not selectable/searchable vector text,
-// unlike the Latin/English portions of the same document. That's a
-// materially better result than shipping visibly wrong Bengali.
+// 1. Missing glyphs. A character the embedded font simply doesn't
+//    contain would render as a blank box or nothing at all.
+// 2. Complex shaping. Some scripts need more than "one character = one
+//    glyph in the same place it was typed" — e.g. a vowel sign stored
+//    after its consonant in the text but displayed before it, or several
+//    consonants combining into one ligature glyph. jsPDF's text API does
+//    neither; it maps each character straight to a glyph via the font's
+//    cmap. Confirmed directly: rendering real text from a script with
+//    this kind of shaping requirement through jsPDF, even with a font
+//    that has every needed glyph, produced visibly wrong output — marks
+//    in the wrong position, missing ligatures.
+//
+// Neither problem is specific to one language, so the fix isn't either:
+// every character is checked against what the embedded font actually
+// contains (pdf-fonts.ts's isCoveredByBodyFont/isCoveredByMonoFont, read
+// from the font files themselves). Anything not covered is rendered
+// through <canvas> instead of jsPDF's text API and placed into the PDF as
+// a small image. A browser's own canvas text rendering performs real
+// shaping and draws from the browser/OS's own installed fonts — the same
+// engine and font stack that already renders that script correctly on any
+// other web page — so this isn't limited to whichever scripts were tested
+// while building it. Confirmed correct the same way: rendering real text
+// from more than one such script and reading the result.
+//
+// The honest tradeoff: text rendered this way becomes an image in the
+// exported PDF, not selectable/searchable vector text like the Latin
+// portions of the same document. That's a real limitation, reported as
+// such — and a materially better result than shipping visibly wrong text.
 const PX_TO_MM = 25.4 / 96; // CSS px, 96dpi reference, to mm
 const PT_TO_PX = 4 / 3; // PDF points to CSS px, at the same 96dpi reference
-const BENGALI_RENDER_SCALE = 2.5; // internal canvas oversampling for print sharpness — tuned down from 4x after confirming 2.5x is still crisp at 300dpi print resolution while roughly halving the embedded-image file size
+const FALLBACK_RENDER_SCALE = 2.5; // internal canvas oversampling for print sharpness — tuned down from 4x after confirming 2.5x is still crisp at 300dpi print resolution while roughly halving the embedded-image file size
 
 let measureCanvasCtx: CanvasRenderingContext2D | null = null;
 function getMeasureCtx(): CanvasRenderingContext2D {
   if (!measureCanvasCtx) {
     const c = document.createElement("canvas");
     const got = c.getContext("2d");
-    if (!got) throw new Error("2D canvas context unavailable — required for Bengali text rendering.");
+    if (!got) throw new Error("2D canvas context unavailable — required for rendering text outside the embedded font's coverage.");
     measureCanvasCtx = got;
   }
   return measureCanvasCtx;
 }
 
-function bengaliCanvasFont(fontSizePt: number, bold: boolean): string {
+function fallbackCanvasFont(fontSizePt: number, bold: boolean, italic: boolean): string {
   const px = fontSizePt * PT_TO_PX;
-  return `${bold ? "bold " : ""}${px}px ${BENGALI_FONT_FAMILY_CSS}`;
+  const weight = bold ? "bold " : "";
+  const style = italic ? "italic " : "";
+  return `${style}${weight}${px}px ${FALLBACK_FONT_CSS_STACK}`;
 }
 
-function measureBengaliWidthMm(text: string, fontSizePt: number, bold: boolean): number {
+function measureFallbackWidthMm(text: string, fontSizePt: number, bold: boolean, italic: boolean): number {
   const ctx = getMeasureCtx();
-  ctx.font = bengaliCanvasFont(fontSizePt, bold);
+  ctx.font = fallbackCanvasFont(fontSizePt, bold, italic);
   return ctx.measureText(text).width * PX_TO_MM;
 }
 
-/** Rasterizes one Bengali run and places it in the PDF via addImage, with
- *  its baseline aligned to lineBaselineY so it sits on the same line as
- *  the vector Latin text around it. */
-function drawBengaliSnippet(
+/** Rasterizes one out-of-coverage run and places it in the PDF via
+ *  addImage, with its baseline aligned to lineBaselineY so it sits on the
+ *  same line as the vector text around it. */
+function drawFallbackSnippet(
   ctx: Ctx,
   text: string,
   xMm: number,
   lineBaselineY: number,
   fontSizePt: number,
   bold: boolean,
-  color: [number, number, number]
+  italic: boolean,
+  color: [number, number, number],
+  targetWidthMm?: number
 ) {
-  const font = bengaliCanvasFont(fontSizePt, bold);
+  const font = fallbackCanvasFont(fontSizePt, bold, italic);
   const measureCtx = getMeasureCtx();
   measureCtx.font = font;
   const metrics = measureCtx.measureText(text);
@@ -293,22 +312,31 @@ function drawBengaliSnippet(
   const heightPx = Math.max(1, Math.ceil(ascentPx + descentPx) + 2);
 
   const canvas = document.createElement("canvas");
-  canvas.width = widthPx * BENGALI_RENDER_SCALE;
-  canvas.height = heightPx * BENGALI_RENDER_SCALE;
+  canvas.width = widthPx * FALLBACK_RENDER_SCALE;
+  canvas.height = heightPx * FALLBACK_RENDER_SCALE;
   const dctx = canvas.getContext("2d");
   if (!dctx) return;
-  dctx.scale(BENGALI_RENDER_SCALE, BENGALI_RENDER_SCALE);
+  dctx.scale(FALLBACK_RENDER_SCALE, FALLBACK_RENDER_SCALE);
   dctx.font = font;
   dctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
   dctx.textBaseline = "alphabetic";
   dctx.fillText(text, 0, ascentPx + 1);
 
   const dataUrl = canvas.toDataURL("image/png");
-  const widthMm = widthPx * PX_TO_MM;
+  // When a group of several words is drawn as one snippet, its displayed
+  // width is pinned to targetWidthMm — the sum of the same per-word
+  // measurements line-wrapping already used to position it — so it lines
+  // up exactly with whatever comes right after it on the line rather than
+  // drifting slightly from canvas's own shaped measurement of the same
+  // text (kerning/joining can make those two measurements differ very
+  // slightly for scripts where letterforms connect).
+  const naturalWidthMm = widthPx * PX_TO_MM;
+  const widthMm = targetWidthMm ?? naturalWidthMm;
   const heightMm = heightPx * PX_TO_MM;
   const topYMm = lineBaselineY - (ascentPx + 1) * PX_TO_MM;
   ctx.pdf.addImage(dataUrl, "PNG", xMm, topYMm, widthMm, heightMm);
 }
+
 
 // ───────────────────── Inline HTML (only <u>, pre-existing) ─────────────────────
 // The original tool's only custom toolbar command wraps a selection in
@@ -382,7 +410,7 @@ interface WordTok {
   style: RunStyle;
   isSpace: boolean;
   isBreak: boolean;
-  isBengali: boolean;
+  needsFallback: boolean;
 }
 interface PlacedTok extends WordTok {
   x: number;
@@ -390,25 +418,29 @@ interface PlacedTok extends WordTok {
 }
 
 /**
- * Splits a non-whitespace token into script-homogeneous pieces (e.g.
- * "COVID-১৯" -> "COVID-" + "১৯") so a word that mixes scripts still routes
- * each part to the font that can actually render it, rather than an
- * all-or-nothing check on the whole "word".
+ * Splits a non-whitespace token into pieces based on whether the embedded
+ * font covers each character (e.g. "COVID-১৯" -> "COVID-" covered, "১৯"
+ * not) so a "word" that mixes covered and uncovered characters still
+ * routes each part to whichever rendering path can actually draw it,
+ * rather than an all-or-nothing check on the whole token. Which coverage
+ * table applies depends on the run's own style: code spans render in the
+ * mono font, everything else in the body font.
  */
-function splitByScript(text: string, style: RunStyle): WordTok[] {
+function splitByFontCoverage(text: string, style: RunStyle): WordTok[] {
+  const isCovered = style.code ? isCoveredByMonoFont : isCoveredByBodyFont;
   const out: WordTok[] = [];
   let cur = "";
-  let curIsBengali: boolean | null = null;
+  let curNeedsFallback: boolean | null = null;
   const flush = () => {
-    if (cur) out.push({ text: cur, style, isSpace: false, isBreak: false, isBengali: !!curIsBengali });
+    if (cur) out.push({ text: cur, style, isSpace: false, isBreak: false, needsFallback: !!curNeedsFallback });
     cur = "";
   };
   for (const ch of text) {
-    const bengali = isBengaliChar(ch);
-    if (curIsBengali === null) curIsBengali = bengali;
-    else if (bengali !== curIsBengali) {
+    const needsFallback = !isCovered(ch);
+    if (curNeedsFallback === null) curNeedsFallback = needsFallback;
+    else if (needsFallback !== curNeedsFallback) {
       flush();
-      curIsBengali = bengali;
+      curNeedsFallback = needsFallback;
     }
     cur += ch;
   }
@@ -421,9 +453,9 @@ function tokenizeRuns(runs: Run[]): WordTok[] {
   for (const run of runs) {
     const parts = run.text.match(/[^\S\n]+|\n|\S+/g) ?? [];
     for (const p of parts) {
-      if (p === "\n") out.push({ text: "", style: run.style, isSpace: false, isBreak: true, isBengali: false });
-      else if (/^[^\S\n]+$/.test(p)) out.push({ text: p, style: run.style, isSpace: true, isBreak: false, isBengali: false });
-      else out.push(...splitByScript(p, run.style));
+      if (p === "\n") out.push({ text: "", style: run.style, isSpace: false, isBreak: true, needsFallback: false });
+      else if (/^[^\S\n]+$/.test(p)) out.push({ text: p, style: run.style, isSpace: true, isBreak: false, needsFallback: false });
+      else out.push(...splitByFontCoverage(p, run.style));
     }
   }
   return out;
@@ -441,13 +473,14 @@ function applyTokFont(ctx: Ctx, style: RunStyle, baseSize: number) {
 }
 
 /**
- * Width of a token in mm, for line-layout math. Bengali tokens are
- * measured via <canvas> (see the long comment above measureBengaliWidthMm)
- * since that's the same engine that will actually draw them and jsPDF has
- * no way to measure text it can't correctly shape in the first place.
+ * Width of a token in mm, for line-layout math. Tokens outside the
+ * embedded font's coverage are measured via <canvas> (see
+ * measureFallbackWidthMm above) since that's the same engine that will
+ * actually draw them, and jsPDF has no way to measure text it can't
+ * correctly render in the first place.
  */
 function measureTokWidth(ctx: Ctx, tok: WordTok, baseSize: number): number {
-  if (tok.isBengali) return measureBengaliWidthMm(tok.text, baseSize, !!tok.style.bold);
+  if (tok.needsFallback) return measureFallbackWidthMm(tok.text, baseSize, !!tok.style.bold, !!tok.style.italic);
   applyTokFont(ctx, tok.style, baseSize);
   return ctx.pdf.getTextWidth(tok.text);
 }
@@ -487,6 +520,11 @@ function lineHeightMm(baseSizePt: number): number {
   return baseSizePt * PT_TO_MM * 1.5;
 }
 
+function sameFallbackStyle(a: RunStyle, b: RunStyle): boolean {
+  return !!a.bold === !!b.bold && !!a.italic === !!b.italic && !!a.underline === !!b.underline
+    && !!a.strike === !!b.strike && !!a.code === !!b.code && a.href === b.href;
+}
+
 function drawLines(ctx: Ctx, lines: PlacedTok[][], x0: number, baseSize: number) {
   const lh = lineHeightMm(baseSize);
   const fsMm = baseSize * PT_TO_MM;
@@ -496,11 +534,44 @@ function drawLines(ctx: Ctx, lines: PlacedTok[][], x0: number, baseSize: number)
     ensureSpace(ctx, lh);
     const lineY = ctx.y + fsMm * 0.75;
 
-    for (const tok of line) {
+    // Fallback-rendered tokens are grouped into runs before drawing,
+    // rather than one canvas snippet per word. A script that needs real
+    // shaping doesn't just need each word shaped correctly in isolation —
+    // a multi-word right-to-left phrase needs its *word order* reversed
+    // too, which only happens correctly if the whole phrase is handed to
+    // canvas as one string. Grouping consecutive same-style fallback
+    // tokens (including the plain spaces between them) into one snippet
+    // is what makes that work; drawing the pre-computed layout width
+    // (summed from the same per-word measurements used for line-wrapping)
+    // rather than the group's own natural width keeps it from overlapping
+    // whatever comes right after it on the line.
+    const consumed = new Set<number>();
+    let gi = 0;
+    while (gi < line.length) {
+      const startTok = line[gi];
+      if (!startTok.needsFallback || startTok.isSpace) { gi++; continue; }
+      let gj = gi;
+      while (gj < line.length && (line[gj].needsFallback || line[gj].isSpace) && sameFallbackStyle(line[gj].style, startTok.style)) gj++;
+      let gEnd = gj;
+      while (gEnd > gi && line[gEnd - 1].isSpace) gEnd--;
+      const group = line.slice(gi, gEnd);
+      if (group.length > 0) {
+        const combinedText = group.map((t) => t.text).join("");
+        const first = group[0];
+        const last = group[group.length - 1];
+        const groupWidth = last.x + last.width - first.x;
+        const color = startTok.style.href ? LINK_COLOR : startTok.style.code ? ([190, 30, 90] as [number, number, number]) : BODY_COLOR;
+        drawFallbackSnippet(ctx, combinedText, x0 + first.x, lineY, baseSize, !!startTok.style.bold, !!startTok.style.italic, color, groupWidth);
+        for (let k = gi; k < gEnd; k++) consumed.add(k);
+      }
+      gi = gj;
+    }
+
+    line.forEach((tok, idx) => {
       const color = tok.style.href ? LINK_COLOR : tok.style.code ? ([190, 30, 90] as [number, number, number]) : BODY_COLOR;
 
-      if (tok.isBengali) {
-        if (!tok.isSpace) drawBengaliSnippet(ctx, tok.text, x0 + tok.x, lineY, baseSize, !!tok.style.bold, color);
+      if (tok.needsFallback) {
+        if (!tok.isSpace && !consumed.has(idx)) drawFallbackSnippet(ctx, tok.text, x0 + tok.x, lineY, baseSize, !!tok.style.bold, !!tok.style.italic, color);
       } else {
         applyTokFont(ctx, tok.style, baseSize);
         ctx.pdf.setTextColor(...color);
@@ -517,11 +588,11 @@ function drawLines(ctx: Ctx, lines: PlacedTok[][], x0: number, baseSize: number)
         ctx.pdf.setDrawColor(...BODY_COLOR);
         ctx.pdf.line(x0 + tok.x, sy, x0 + tok.x + tok.width, sy);
       }
-    }
+    });
 
     // Links render as real clickable annotations as a direct consequence
     // of using jsPDF's text API at all — not something extra bolted on.
-    // This works identically for Bengali runs: the annotation rectangle
+    // This works identically for fallback-rendered runs: the annotation rectangle
     // comes from the token's x/width, which is set during layout the same
     // way regardless of whether the glyph itself is drawn as vector text
     // or a rasterized snippet. Full link-workflow verification (editing,
@@ -703,7 +774,7 @@ function renderTable(ctx: Ctx, table: Tokens.Table, frame: Frame) {
 
   // Reuses the same run-flattening/line-layout/line-drawing machinery as
   // every other block type, rather than a separate plain-text-only path —
-  // this is what makes Bengali (and bold/italic/links) work correctly
+  // this is what makes any Unicode fallback rendering (and bold/italic/links) work correctly
   // inside table cells too, not just in paragraphs.
   const layoutCell = (cell: Tokens.TableCell): PlacedTok[][] =>
     layoutRuns(ctx, flattenInline(cell.tokens, {}), colW - cellPad * 2, fs);
