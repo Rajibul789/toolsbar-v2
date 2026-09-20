@@ -50,15 +50,24 @@ export const MONO_FONT_FAMILY: PdfFontFamily = "jetbrains-mono";
 const fetchCache = new Map<string, Promise<ArrayBuffer>>();
 
 function fetchFontBuffer(filename: string): Promise<ArrayBuffer> {
-  let cached = fetchCache.get(filename);
-  if (!cached) {
-    cached = fetch(`/fonts/${filename}`).then((res) => {
-      if (!res.ok) throw new Error(`Font asset missing: /fonts/${filename} (${res.status})`);
+  const cached = fetchCache.get(filename);
+  if (cached) return cached;
+  const promise = fetch(`/fonts/${filename}`)
+    .then((res) => {
+      if (!res.ok) throw new Error(`Font file "${filename}" returned ${res.status} ${res.statusText} from /fonts/${filename}`);
       return res.arrayBuffer();
+    })
+    .catch((err) => {
+      // A failed fetch is not cached — a transient network hiccup on one
+      // attempt shouldn't permanently poison every export after it with
+      // the same stale rejected promise. Re-thrown with the filename
+      // attached so the failure is traceable to a specific asset rather
+      // than surfacing as a generic, unattributed export failure.
+      fetchCache.delete(filename);
+      throw err instanceof Error ? err : new Error(`Failed to fetch font "${filename}": ${String(err)}`);
     });
-    fetchCache.set(filename, cached);
-  }
-  return cached;
+  fetchCache.set(filename, promise);
+  return promise;
 }
 
 /** ArrayBuffer -> base64, chunked to avoid call-stack blowups on large
@@ -89,21 +98,32 @@ export async function registerPdfFont(
   const files = FONT_FILES[family];
   const id = FONT_IDS[family];
 
-  const [normal, bold, italic, bolditalic] = await Promise.all([
-    fetchFontBase64(files.normal),
-    fetchFontBase64(files.bold),
-    fetchFontBase64(files.italic),
-    fetchFontBase64(files.bolditalic),
-  ]);
+  let normal: string, bold: string, italic: string, bolditalic: string;
+  try {
+    [normal, bold, italic, bolditalic] = await Promise.all([
+      fetchFontBase64(files.normal),
+      fetchFontBase64(files.bold),
+      fetchFontBase64(files.italic),
+      fetchFontBase64(files.bolditalic),
+    ]);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Could not load the "${family}" font (${detail}). Check that the font files are present under /public/fonts and that the browser can reach them.`);
+  }
 
-  pdf.addFileToVFS(files.normal, normal);
-  pdf.addFont(files.normal, id, "normal");
-  pdf.addFileToVFS(files.bold, bold);
-  pdf.addFont(files.bold, id, "bold");
-  pdf.addFileToVFS(files.italic, italic);
-  pdf.addFont(files.italic, id, "italic");
-  pdf.addFileToVFS(files.bolditalic, bolditalic);
-  pdf.addFont(files.bolditalic, id, "bolditalic");
+  try {
+    pdf.addFileToVFS(files.normal, normal);
+    pdf.addFont(files.normal, id, "normal");
+    pdf.addFileToVFS(files.bold, bold);
+    pdf.addFont(files.bold, id, "bold");
+    pdf.addFileToVFS(files.italic, italic);
+    pdf.addFont(files.italic, id, "italic");
+    pdf.addFileToVFS(files.bolditalic, bolditalic);
+    pdf.addFont(files.bolditalic, id, "bolditalic");
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to embed the "${family}" font into the PDF (${detail}).`);
+  }
 
   return { id };
 }

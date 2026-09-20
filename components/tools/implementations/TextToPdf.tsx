@@ -154,7 +154,13 @@ export function TextToPdf() {
       toast.success(`PDF exported — ${pageCount} page${pageCount === 1 ? "" : "s"}`);
     } catch (err) {
       console.error("[TextToPdf] export error:", err);
-      toast.error("Export failed. Please try again.");
+      // Specific, not generic: a font/network failure, a canvas-availability
+      // issue, and a real bug all need different next steps from the user,
+      // and "Export failed. Please try again." collapses that into nothing
+      // actionable. err.message here comes from the specific stage that
+      // failed (see lib/pdf-fonts.ts / lib/markdown-pdf.ts).
+      const detail = err instanceof Error && err.message ? err.message : "Unknown error.";
+      toast.error(`PDF export failed: ${detail}`, { duration: 8000 });
     } finally {
       setIsExporting(false);
     }

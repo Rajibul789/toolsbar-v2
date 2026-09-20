@@ -95,11 +95,22 @@ export async function generateMarkdownPdf(
   const preprocessed = preprocessWhitespace(markdown);
   const tokens = marked.lexer(preprocessed);
 
-  pdf.setFont(ctx.bodyFontId, "normal");
-  pdf.setFontSize(ctx.baseFontSize);
-  renderBlocks(ctx, tokens, { x0: marginX, maxW: ctx.maxW });
+  try {
+    pdf.setFont(ctx.bodyFontId, "normal");
+    pdf.setFontSize(ctx.baseFontSize);
+    renderBlocks(ctx, tokens, { x0: marginX, maxW: ctx.maxW });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed while laying out the document (${detail}).`);
+  }
 
-  const blob = pdf.output("blob") as Blob;
+  let blob: Blob;
+  try {
+    blob = pdf.output("blob") as Blob;
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to finalize the PDF file (${detail}).`);
+  }
   return { blob, pageCount: pdf.getNumberOfPages() };
 }
 
