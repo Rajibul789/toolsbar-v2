@@ -8,6 +8,7 @@ import { CyberScanner } from "@/components/animations/CyberScanner";
 import { ResultReveal, DownloadButton } from "@/components/tools/ResultReveal";
 import { formatBytes, downloadBlob } from "@/lib/utils";
 import { toast } from "sonner";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 
 type ProcessState = "idle" | "processing" | "complete" | "error";
 type SplitMode    = "all" | "range" | "evens" | "odds";
@@ -23,20 +24,34 @@ interface PageResult {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 /**
- * Minimum byte size to consider a pdf-lib output page non-blank.
- * An empty 1-page PDF shell (no content) from pdf-lib is ~700-1100 bytes.
- * Any page with real text, images, or vector content will be several KB+.
+ * pdf-lib outputs at or below this size are VERIFIED by rendering them (see
+ * hasVisibleContent) before being trusted. Size is only a trigger for that
+ * check — never a verdict on its own.
+ *
+ * The previous design treated any output under 1,800 bytes as "blank" and
+ * sent it straight to image rasterisation. That was wrong: a perfectly valid
+ * text page copied by pdf-lib is routinely smaller than that (measured:
+ * 40 lines of 11 pt text -> 1,745 bytes; a short paragraph -> ~1,160 bytes;
+ * a single line -> ~850 bytes), so ordinary text pages were needlessly
+ * converted to non-selectable images.
  */
-const BLANK_THRESHOLD_BYTES = 1_800;
+const VERIFY_BELOW_BYTES = 8_000;
 
-/** Thumbnail canvas size for pixel-level blank detection (small = fast) */
-const THUMB_SIZE = 48;
+/**
+ * Thumbnail size (longest edge, px) for the content check. 256 px keeps even
+ * a single short line of 10 pt text visible (at 48 px it rendered as 1-3
+ * pixels and could be mistaken for blank).
+ */
+const THUMB_SIZE = 256;
 
-/** Canvas rasterisation DPI multiplier (2× = crisp on Retina, fast enough) */
+/** Canvas rasterisation DPI multiplier (2.5× = crisp on Retina, fast enough) */
 const RASTER_SCALE = 2.5;
 
-/** Browser split limit: files larger than this go via the API route */
-const BROWSER_LIMIT_BYTES = 20 * 1024 * 1024; // 20 MB
+/** Files above this size only get a heads-up toast; they are still processed locally. */
+const LARGE_FILE_NOTICE_BYTES = 20 * 1024 * 1024; // 20 MB
+
+const PDFJS_WORKER_URL = (version: string) =>
+  `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.js`;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -54,115 +69,112 @@ function parseRanges(input: string, total: number): number[] {
   return [...pages].sort((a, b) => a - b);
 }
 
-function base64ToBlob(b64: string, mime = "application/pdf"): Blob {
-  const bin  = atob(b64);
-  const u8   = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-  return new Blob([u8], { type: mime });
-}
-
 /**
- * Render a single PDF page from raw bytes to a Blob via pdfjs-dist canvas.
- * Used as the fallback engine for every page that fails the primary engine.
+ * Render one page of an ALREADY-OPEN pdf.js document to a single-page,
+ * image-based PDF Blob. Used as the fallback engine for pages pdf-lib cannot
+ * copy faithfully.
+ *
+ * The document is opened once by the caller and shared across pages. The
+ * previous version re-parsed (and copied) the whole source file for every
+ * page, which for a 50 MB / 100-page PDF meant 100 full parses and 5 GB of
+ * transient copies — the main reason large files were hard on the browser.
  */
-async function rasterisePage(
-  srcBytes: Uint8Array,
-  pageIndex: number,         // 0-based
-  pdfjsLib: typeof import("pdfjs-dist")
-): Promise<Blob> {
-  const loadingTask = pdfjsLib.getDocument({ data: srcBytes.slice(), disableFontFace: false });
-  const pdfDoc = await loadingTask.promise;
+async function rasterisePage(pdfDoc: PDFDocumentProxy, pageIndex: number): Promise<Blob> {
+  const page     = await pdfDoc.getPage(pageIndex + 1); // pdfjs is 1-based
+  const viewport = page.getViewport({ scale: RASTER_SCALE });
+
+  const canvas  = document.createElement("canvas");
+  canvas.width  = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  const ctx     = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas context unavailable");
+
+  // White background (PDFs render transparent without it)
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   try {
-    const page      = await pdfDoc.getPage(pageIndex + 1); // pdfjs is 1-based
-    const viewport  = page.getViewport({ scale: RASTER_SCALE });
-
-    const canvas        = document.createElement("canvas");
-    canvas.width        = Math.round(viewport.width);
-    canvas.height       = Math.round(viewport.height);
-    const ctx           = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas context unavailable");
-
-    // White background (PDFs render transparent without it)
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     await page.render({ canvasContext: ctx, viewport }).promise;
-    page.cleanup();
-
-    // Embed canvas as JPEG in a new PDF via jsPDF
-    const { jsPDF } = await import("jspdf");
-
-    // Convert viewport (in CSS px at RASTER_SCALE) back to pt for jsPDF
-    // 1 pt = 1/72 inch; pdfjs viewport uses CSS px at 96 dpi
-    const widthPt  = viewport.width  / RASTER_SCALE * 72 / 96;
-    const heightPt = viewport.height / RASTER_SCALE * 72 / 96;
-
-    const doc = new jsPDF({
-      unit:        "pt",
-      format:      [widthPt, heightPt],
-      orientation: widthPt > heightPt ? "landscape" : "portrait",
-      compress:    true,
-    });
-
-    const imgData = canvas.toDataURL("image/jpeg", 0.92);
-    doc.addImage(imgData, "JPEG", 0, 0, widthPt, heightPt, "", "FAST");
-
-    const pdfBytes = doc.output("arraybuffer");
-    return new Blob([pdfBytes], { type: "application/pdf" });
   } finally {
-    pdfDoc.destroy();
+    page.cleanup();
   }
+
+  // Embed canvas as JPEG in a new PDF via jsPDF
+  const { jsPDF } = await import("jspdf");
+
+  // Convert viewport (in CSS px at RASTER_SCALE) back to pt for jsPDF
+  // 1 pt = 1/72 inch; pdfjs viewport uses CSS px at 96 dpi
+  const widthPt  = viewport.width  / RASTER_SCALE * 72 / 96;
+  const heightPt = viewport.height / RASTER_SCALE * 72 / 96;
+
+  const doc = new jsPDF({
+    unit:        "pt",
+    format:      [widthPt, heightPt],
+    orientation: widthPt > heightPt ? "landscape" : "portrait",
+    compress:    true,
+  });
+
+  const imgData = canvas.toDataURL("image/jpeg", 0.92);
+  doc.addImage(imgData, "JPEG", 0, 0, widthPt, heightPt, "", "FAST");
+
+  const pdfBytes = doc.output("arraybuffer");
+  // Release the canvas backing store promptly (matters on mobile Safari).
+  canvas.width = canvas.height = 0;
+  return new Blob([pdfBytes], { type: "application/pdf" });
 }
 
 /**
- * Quick blank-page detection: render the ACTUAL EXTRACTED OUTPUT (a single-page
- * PDF produced by pdf-lib) at tiny resolution and check pixel variance.
+ * Content check on the ACTUAL pdf-lib OUTPUT (a single-page PDF): render it
+ * and look for any non-white pixel.
  *
- * IMPORTANT: this must render the pdf-lib OUTPUT bytes, not the original
- * multi-page source. Re-rendering the source (the earlier implementation)
- * can never detect this exact failure mode: pdfjs-dist correctly decrypts
- * and renders an encrypted SOURCE PDF (so it always "has content"), even
- * when pdf-lib's copyPages() has produced a corrupted, still-encrypted,
- * visually blank OUTPUT page. Only rendering the true output artifact
- * catches this.
+ * It must render the pdf-lib OUTPUT bytes, not the original multi-page
+ * source: pdf.js correctly decrypts and renders an encrypted SOURCE (so it
+ * always "has content") even when pdf-lib's copyPages() has produced a
+ * corrupted, still-encrypted, visually blank OUTPUT page.
+ *
+ * "Any non-white pixel" is deliberate. A genuinely blank page renders as
+ * pure white (0 non-white pixels, measured), whereas the old ">5 pixels at
+ * 48 px" rule misread short pages as blank. The failure directions are not
+ * symmetric either: wrongly trusting a blank page costs nothing the user can
+ * see in a fixed-size output, while wrongly distrusting a real page turns it
+ * into a non-selectable image — so the check errs toward "has content".
  */
 async function hasVisibleContent(
-  outputBytes: Uint8Array,   // the pdf-lib-produced single-page PDF to validate
+  outputBytes: Uint8Array,
   pdfjsLib: typeof import("pdfjs-dist")
 ): Promise<boolean> {
   try {
     const task = pdfjsLib.getDocument({ data: outputBytes.slice() });
     const pdf  = await task.promise;
-    const page = await pdf.getPage(1); // output is always a single page
+    try {
+      const page = await pdf.getPage(1); // output is always a single page
 
-    const vp     = page.getViewport({ scale: 1 });
-    const scale  = Math.min(THUMB_SIZE / vp.width, THUMB_SIZE / vp.height);
-    const scaled = page.getViewport({ scale });
+      const vp     = page.getViewport({ scale: 1 });
+      const scale  = Math.min(THUMB_SIZE / vp.width, THUMB_SIZE / vp.height);
+      const scaled = page.getViewport({ scale });
 
-    const canvas  = document.createElement("canvas");
-    canvas.width  = Math.round(scaled.width);
-    canvas.height = Math.round(scaled.height);
-    const ctx     = canvas.getContext("2d")!;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: ctx, viewport: scaled }).promise;
-    page.cleanup();
-    pdf.destroy();
+      const canvas  = document.createElement("canvas");
+      canvas.width  = Math.max(1, Math.round(scaled.width));
+      canvas.height = Math.max(1, Math.round(scaled.height));
+      const ctx     = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return true; // cannot check -> keep the structurally-copied page
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: scaled }).promise;
+      page.cleanup();
 
-    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    // Count pixels that are meaningfully non-white (< 240 in any channel)
-    let nonWhite = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      if (data[i] < 240 || data[i + 1] < 240 || data[i + 2] < 240) {
-        nonWhite++;
-        if (nonWhite > 5) return true; // Early exit — definitely has content
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      for (let i = 0; i < data.length; i += 4) {
+        // Anything below near-white in any channel counts as ink.
+        if (data[i] < 250 || data[i + 1] < 250 || data[i + 2] < 250) return true;
       }
+      return false;
+    } finally {
+      await pdf.destroy();
     }
-    return nonWhite > 5;
   } catch {
     // If the output PDF can't even be parsed/rendered, treat as blank/broken
-    // (fail closed here — an unparseable "output" is not a good result either way).
+    // (fail closed — an unparseable "output" is not a good result either way).
     return false;
   }
 }
@@ -208,7 +220,7 @@ export function PdfSplit() {
   /**
    * Attempts a text-preserving structural copy for each page.
    * Returns:
-   *   results:     successfully extracted pages
+   *   results:      extracted pages (not yet verified — see validation stage)
    *   needFallback: page numbers (1-based) that need canvas rasterisation
    */
   async function primaryEngine(
@@ -232,10 +244,10 @@ export function PdfSplit() {
     // the content-stream bytes. copyPages() on an encrypted source copies the
     // still-ciphertext bytes verbatim into a new (unencrypted) document; any
     // viewer opening that output tries to interpret ciphertext as PDF drawing
-    // operators, which produces a blank page essentially 100% of the time.
-    // This affects EVERY encrypted PDF, not just malformed ones — so we detect
-    // it upfront and go straight to the canvas-rasterisation engine, which
-    // uses pdfjs-dist (full RC4/AES decryption support) and is proven to work.
+    // operators, which produces a blank page essentially 100% of the time
+    // (reproduced with AES-256 and RC4-128 test files). We detect it upfront
+    // and go straight to the canvas-rasterisation engine, which uses pdf.js
+    // (full RC4/AES decryption support).
     if (srcDoc.isEncrypted) {
       console.info("[PdfSplit/primary] Source PDF is encrypted — pdf-lib cannot decrypt content streams; routing all pages to canvas fallback.");
       return { results: [], needFallback: pages };
@@ -255,19 +267,16 @@ export function PdfSplit() {
         pageDoc.addPage(copied);
         const uint8 = await pageDoc.save();
 
-        if (uint8.length < BLANK_THRESHOLD_BYTES) {
-          // Too small → likely blank; queue for fallback
-          needFallback.push(pageNum);
-        } else {
-          const blob = new Blob([uint8.buffer as ArrayBuffer], { type: "application/pdf" });
-          out.push({
-            name:   `page_${String(pageNum).padStart(3, "0")}.pdf`,
-            blob,
-            url:    URL.createObjectURL(blob),
-            size:   blob.size,
-            engine: "pdflib",
-          });
-        }
+        // No size verdict here: every successfully copied page is kept, and
+        // small ones are verified by rendering in the validation stage.
+        const blob = new Blob([uint8.buffer as ArrayBuffer], { type: "application/pdf" });
+        out.push({
+          name:   `page_${String(pageNum).padStart(3, "0")}.pdf`,
+          blob,
+          url:    URL.createObjectURL(blob),
+          size:   blob.size,
+          engine: "pdflib",
+        });
       } catch {
         // This page's structure is incompatible with pdf-lib → fallback
         needFallback.push(pageNum);
@@ -284,6 +293,7 @@ export function PdfSplit() {
    * Renders each failing page to a canvas via pdfjs-dist (the same engine
    * Firefox uses — handles government, scanned, encrypted, linearised PDFs).
    * Embeds the canvas as a high-quality JPEG image in a new PDF via jsPDF.
+   * The source document is opened once and shared by every page.
    *
    * Output is image-based (not text-selectable) but pixel-perfect.
    */
@@ -294,65 +304,63 @@ export function PdfSplit() {
     if (failedPages.length === 0) return [];
 
     const pdfjsLib = await import("pdfjs-dist");
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL(pdfjsLib.version);
 
-    const srcUint8 = new Uint8Array(srcBytes);
+    const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(srcBytes), disableFontFace: false }).promise;
     const out: PageResult[] = [];
 
-    for (let i = 0; i < failedPages.length; i++) {
-      const pageNum = failedPages[i];
-      setStatus(`CANVAS FALLBACK · PAGE ${pageNum} (${i + 1}/${failedPages.length})`);
-      setProgress(65 + Math.round(((i + 1) / failedPages.length) * 25));
+    try {
+      for (let i = 0; i < failedPages.length; i++) {
+        const pageNum = failedPages[i];
+        setStatus(`CANVAS FALLBACK · PAGE ${pageNum} (${i + 1}/${failedPages.length})`);
+        setProgress(65 + Math.round(((i + 1) / failedPages.length) * 25));
 
-      try {
-        const blob = await rasterisePage(srcUint8, pageNum - 1, pdfjsLib);
-        out.push({
-          name:   `page_${String(pageNum).padStart(3, "0")}.pdf`,
-          blob,
-          url:    URL.createObjectURL(blob),
-          size:   blob.size,
-          engine: "canvas",
-        });
-      } catch (err) {
-        console.error(`[PdfSplit/fallback] Page ${pageNum} failed:`, err);
-        toast.error(`Page ${pageNum} could not be extracted (${err instanceof Error ? err.message : "render error"})`);
+        try {
+          const blob = await rasterisePage(pdfDoc, pageNum - 1);
+          out.push({
+            name:   `page_${String(pageNum).padStart(3, "0")}.pdf`,
+            blob,
+            url:    URL.createObjectURL(blob),
+            size:   blob.size,
+            engine: "canvas",
+          });
+        } catch (err) {
+          console.error(`[PdfSplit/fallback] Page ${pageNum} failed:`, err);
+          toast.error(`Page ${pageNum} could not be extracted (${err instanceof Error ? err.message : "render error"})`);
+        }
+
+        await new Promise((r) => setTimeout(r, 8));
       }
-
-      await new Promise((r) => setTimeout(r, 8));
+    } finally {
+      await pdfDoc.destroy();
     }
 
     return out;
   }
 
-  // ── VALIDATION: pixel-level blank check on suspicious pages ─────
+  // ── VALIDATION: render-based content check on small outputs ─────
   /**
-   * Re-validates pdf-lib results that are small-but-above-threshold.
-   * For very complex PDFs, some pages pass the size check but still render
-   * blank because the content stream uses operators pdf-lib can't copy
-   * (or — as with encrypted PDFs — the "content" is undecoded ciphertext).
-   * We render a tiny thumbnail of the ACTUAL OUTPUT via pdfjs to catch these.
+   * Verifies every small pdf-lib output (<= VERIFY_BELOW_BYTES) by rendering
+   * a thumbnail of the ACTUAL OUTPUT via pdf.js. Pages that render blank are
+   * rerouted to the canvas engine (this catches ciphertext/undecodable
+   * content that survived copyPages()). Larger outputs are trusted: they are
+   * very unlikely to be blank and the render is comparatively expensive.
    */
   async function validateAndRerouteBlankPages(
     primaryResults: PageResult[],
     pdfjsLib: typeof import("pdfjs-dist")
   ): Promise<{ valid: PageResult[]; reroutePages: number[] }> {
-    // Only validate pages that are small (2-8 KB) — larger pages are very
-    // unlikely to be blank and the thumbnail render is CPU-intensive.
-    const RECHECK_UPPER = 8_000;
     const valid: PageResult[] = [];
     const reroutePages: number[] = [];
 
     for (const result of primaryResults) {
-      if (result.size > RECHECK_UPPER) {
+      if (result.size > VERIFY_BELOW_BYTES) {
         valid.push(result);
         continue;
       }
 
-      // Small page — run pixel check against the ACTUAL OUTPUT bytes,
-      // not the source. This is what makes the check meaningful.
-      const pageNum   = parseInt(result.name.replace(/\D/g, ""), 10);
-      const outputU8  = new Uint8Array(await result.blob.arrayBuffer());
+      const pageNum    = parseInt(result.name.replace(/\D/g, ""), 10);
+      const outputU8   = new Uint8Array(await result.blob.arrayBuffer());
       const hasContent = await hasVisibleContent(outputU8, pdfjsLib);
 
       if (hasContent) {
@@ -366,50 +374,7 @@ export function PdfSplit() {
     return { valid, reroutePages };
   }
 
-  // ── SERVER-SIDE PATH for large files (>20 MB) ───────────────────
-  async function serverEngine(f: File, pages: number[]): Promise<{ results: PageResult[]; needFallback: number[] }> {
-    setStatus("SENDING TO SERVER PROCESSOR...");
-    setProgress(20);
-
-    const form = new FormData();
-    form.append("pdf", f);
-    if (pages.length > 0 && pages.length !== pageCount) {
-      form.append("pages", pages.join(","));
-    }
-
-    const res = await fetch("/api/pdf/split", { method: "POST", body: form });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "Server error" }));
-      throw new Error(err.error ?? "Server-side split failed");
-    }
-
-    setProgress(70);
-    setStatus("VALIDATING SERVER RESULTS...");
-
-    const data = await res.json() as {
-      pages: Array<{ name: string; data: string; valid: boolean; sizeBytes: number; pageNum: number; engine: string; error?: string }>;
-      failed: number;
-    };
-
-    // v2 response shape: { pages: [...], failed: N }
-    const pageList = data.pages ?? (Array.isArray(data) ? data : []);
-
-    const out: PageResult[]      = [];
-    const needFallback: number[] = [];
-
-    for (const item of pageList) {
-      if (!item.valid || !item.data) {
-        needFallback.push(item.pageNum);
-        continue;
-      }
-      const blob = base64ToBlob(item.data);
-      out.push({ name: item.name, blob, url: URL.createObjectURL(blob), size: blob.size, engine: "pdflib" });
-    }
-
-    return { results: out, needFallback };
-  }
-
-  // ── MAIN HANDLER: 4-stage orchestration ─────────────────────────
+  // ── MAIN HANDLER: 4-stage orchestration (entirely in the browser) ─
   async function handleSplit() {
     if (!file) { toast.error("Please upload a PDF first."); return; }
 
@@ -419,6 +384,13 @@ export function PdfSplit() {
     setFallbackCount(0);
     results.forEach((r) => URL.revokeObjectURL(r.url));
 
+    // Everything runs on the user's device. (There is deliberately no server
+    // upload path: Vercel rejects request bodies above ~4.5 MB, so a
+    // "large files go to the server" route could never work in production.)
+    if (file.size > LARGE_FILE_NOTICE_BYTES) {
+      toast.info("Large PDF — splitting runs on your device and may take a while. Keep this tab open.");
+    }
+
     try {
       // ── Stage 0: resolve page count ────────────────────────────────────────
       let totalPages = pageCount;
@@ -426,8 +398,7 @@ export function PdfSplit() {
         setStatus("READING DOCUMENT STRUCTURE...");
         setProgress(8);
         const pdfjsLib = await import("pdfjs-dist");
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-          `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL(pdfjsLib.version);
         const doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
         totalPages  = doc.numPages;
         setPageCount(totalPages);
@@ -455,35 +426,23 @@ export function PdfSplit() {
 
       // ── Stage 1: PRIMARY ENGINE ─────────────────────────────────────────────
       setStatus("STAGE 1/4 · PRIMARY ENGINE (PDF-LIB)...");
-      let primaryResults: PageResult[];
-      let needFallback: number[];
+      const primary = await primaryEngine(await file.arrayBuffer(), selected);
+      let primaryResults = primary.results;
+      let needFallback   = primary.needFallback;
 
-      if (file.size <= BROWSER_LIMIT_BYTES) {
-        const srcBytes = await file.arrayBuffer();
-        const primary  = await primaryEngine(srcBytes, selected);
-        primaryResults  = primary.results;
-        needFallback    = primary.needFallback;
+      // ── Stage 2: AUTOMATIC VALIDATION ──────────────────────────────────
+      setStatus("STAGE 2/4 · VALIDATING PAGES...");
+      setProgress(60);
 
-        // ── Stage 2: AUTOMATIC VALIDATION ──────────────────────────────────
-        setStatus("STAGE 2/4 · VALIDATING PAGES...");
-        setProgress(60);
-
-        if (primaryResults.length > 0) {
-          const pdfjsLib = await import("pdfjs-dist");
-          pdfjsLib.GlobalWorkerOptions.workerSrc =
-            `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-          const { valid, reroutePages } = await validateAndRerouteBlankPages(
-            primaryResults,
-            pdfjsLib
-          );
-          primaryResults = valid;
-          needFallback   = [...needFallback, ...reroutePages].sort((a, b) => a - b);
-        }
-      } else {
-        // Large files: server handles Stage 1 + Stage 2 validation
-        const server   = await serverEngine(file, selected);
-        primaryResults  = server.results;
-        needFallback    = server.needFallback;
+      if (primaryResults.length > 0) {
+        const pdfjsLib = await import("pdfjs-dist");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL(pdfjsLib.version);
+        const { valid, reroutePages } = await validateAndRerouteBlankPages(
+          primaryResults,
+          pdfjsLib
+        );
+        primaryResults = valid;
+        needFallback   = [...needFallback, ...reroutePages].sort((a, b) => a - b);
       }
 
       // ── Stage 3: FALLBACK ENGINE (pdfjs-dist canvas → jsPDF) ────────────
@@ -492,17 +451,9 @@ export function PdfSplit() {
         setStatus(`STAGE 3/4 · CANVAS RASTERISATION (${needFallback.length} PAGE${needFallback.length > 1 ? "S" : ""})`);
         setProgress(65);
 
-        // Re-read the original file for rasterisation. This works correctly
-        // regardless of whether Stage 1 ran in-browser or on the server,
-        // since File.arrayBuffer() can be safely called multiple times.
-        const srcUint8 = new Uint8Array(await file.arrayBuffer());
-
-        const pdfjsLib = await import("pdfjs-dist");
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-          `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-
-        const ab = srcUint8.buffer as ArrayBuffer;
-        fallbackResults = await fallbackEngine(ab, needFallback);
+        // Fresh read: pdf.js takes ownership of (transfers) the buffer it is
+        // given, so it can't share the one pdf-lib used.
+        fallbackResults = await fallbackEngine(await file.arrayBuffer(), needFallback);
         setFallbackCount(fallbackResults.length);
       }
 
@@ -540,9 +491,15 @@ export function PdfSplit() {
       setState("complete");
 
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Split failed. Please try again.";
       console.error("[PdfSplit]", err);
-      toast.error(msg);
+      // pdf.js throws a PasswordException when a document needs a password to
+      // open (as opposed to merely having edit/print restrictions).
+      const needsPassword = err instanceof Error && err.name === "PasswordException";
+      toast.error(
+        needsPassword
+          ? "This PDF needs a password to open. Remove the password first, then try again."
+          : err instanceof Error ? err.message : "Split failed. Please try again."
+      );
       setState("error");
     }
   }
@@ -592,7 +549,7 @@ export function PdfSplit() {
               sublabel={
                 file
                   ? `${formatBytes(file.size)}${pageCount ? ` · ${pageCount} pages` : ""}`
-                  : "PDF · up to 50 MB · all formats supported"
+                  : "PDF · up to 50 MB · processed in your browser"
               }
             />
 

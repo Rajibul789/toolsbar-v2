@@ -108,7 +108,7 @@ export const TOOLS_CONFIG: ToolConfig[] = [
     category: "pdf-tools",
     icon: "Scissors",
     accentColor: "cyan",
-    processingMode: "hybrid",
+    processingMode: "browser",
     maxFileSizeMb: 50,
     acceptedTypes: ["application/pdf"],
     acceptedExtensions: [".pdf"],
@@ -135,12 +135,17 @@ export const TOOLS_CONFIG: ToolConfig[] = [
       {
         question: "Does my file get uploaded to a server?",
         answer:
-          "For most files, splitting happens entirely in your browser. Only very large or complex files fall back to our secure processing server — files are deleted immediately after.",
+          "No. PDF Split runs entirely in your browser — your file is never uploaded anywhere, whatever its size.",
       },
       {
         question: "What is the maximum PDF size I can split?",
         answer:
-          "You can split PDFs up to 50 MB in size.",
+          "PDFs up to 50 MB are accepted. Because everything is processed on your own device, very large or image-heavy files take longer and need more free memory — keep the tab open until it finishes.",
+      },
+      {
+        question: "What happens with password-protected PDFs?",
+        answer:
+          "PDFs that open without a password but restrict printing or copying are supported: their pages are rendered as images so the content is preserved (those pages are not text-selectable). A PDF that needs a password just to open can't be read — remove the password first.",
       },
     ],
   },
@@ -223,7 +228,7 @@ export const TOOLS_CONFIG: ToolConfig[] = [
     name: "PDF to Text",
     shortDesc: "Extract all readable text content from any PDF document.",
     longDesc:
-      "Instantly pull all text from a PDF into clean, copyable plain text. Uses PDF.js to read text layer data directly — no OCR needed for standard PDFs.",
+      "Instantly pull all text from a PDF into clean, copyable plain text. Uses PDF.js to read the text layer directly, and automatically falls back to in-browser OCR for scanned or image-only pages.",
     category: "pdf-tools",
     icon: "FileOutput",
     accentColor: "green",
@@ -236,7 +241,7 @@ export const TOOLS_CONFIG: ToolConfig[] = [
     keywords: ["pdf to text", "extract text from pdf", "pdf text extraction", "copy pdf text"],
     howItWorks: [
       "Upload your PDF file.",
-      "Text is extracted instantly page by page.",
+      "Text is extracted page by page (scanned pages are read with OCR automatically).",
       "Review the extracted text in the preview panel.",
       "Copy to clipboard or download as a .txt file.",
     ],
@@ -249,7 +254,7 @@ export const TOOLS_CONFIG: ToolConfig[] = [
       {
         question: "Does it work on scanned PDFs?",
         answer:
-          "Scanned PDFs that contain images of text (not a text layer) will return empty results. Use our Image to Word tool with OCR for scanned documents.",
+          "Yes. Pages with a normal text layer are read directly. If a page has no usable text (a scan, an image-only page, or broken font encoding), the tool automatically falls back to OCR (Tesseract.js) running in your browser and detects the script for you. OCR is slower than direct extraction, its accuracy depends on scan quality, and the first run for a language downloads that language's data. Nothing is uploaded.",
       },
     ],
   },
@@ -275,7 +280,7 @@ export const TOOLS_CONFIG: ToolConfig[] = [
       "Upload one or more images.",
       "Adjust the quality slider (default: 80%).",
       "See the before/after file size comparison.",
-      "Download compressed images individually or as a zip.",
+      "Download each compressed image individually, or all of them at once.",
     ],
     useCases: [
       "Optimize product images for your e-commerce store.",
@@ -285,16 +290,21 @@ export const TOOLS_CONFIG: ToolConfig[] = [
     faq: [
       {
         question: "Can I compress multiple images at once?",
-        answer: "Yes — upload up to 10 images in one batch.",
+        answer: "Yes — upload up to 10 images (20 MB each) in one batch.",
+      },
+      {
+        question: "Why was my PNG converted to JPEG?",
+        answer:
+          "PNG is lossless, so the quality slider can't shrink it the way it shrinks JPEG or WebP. The tool first tries to re-encode the PNG; if that doesn't make it smaller it converts the image to JPEG (on a white background, so any transparency is lost) and marks the file as converted. If nothing comes out smaller, you get your original file back unchanged.",
       },
     ],
   },
   {
     slug: "image-converter",
     name: "Image Converter",
-    shortDesc: "Convert images between JPG, PNG, WebP, BMP, and more.",
+    shortDesc: "Convert JPG, PNG, WebP, GIF, and BMP images to JPG, PNG, or WebP.",
     longDesc:
-      "Format-convert any image in your browser. Supports JPG, PNG, WebP, BMP, and GIF output — fast, free, and private.",
+      "Format-convert any image in your browser. Reads JPG, PNG, WebP, GIF, and BMP images and converts them to JPG, PNG, or WebP — fast, free, and private.",
     category: "image-tools",
     icon: "RefreshCw",
     accentColor: "blue",
@@ -320,7 +330,12 @@ export const TOOLS_CONFIG: ToolConfig[] = [
       {
         question: "Does conversion reduce image quality?",
         answer:
-          "Conversion to lossy formats (JPG, WebP) uses adjustable quality. PNG and BMP conversions are lossless.",
+          "Conversion to lossy formats (JPG, WebP) uses an adjustable quality setting. Converting to PNG is lossless. Animated GIFs are converted from a single frame.",
+      },
+      {
+        question: "Can I convert to BMP or GIF?",
+        answer:
+          "Not currently. You can open JPG, PNG, WebP, GIF and BMP files, but the output formats are JPG, PNG and WebP.",
       },
     ],
   },
@@ -388,7 +403,7 @@ export const TOOLS_CONFIG: ToolConfig[] = [
       {
         question: "Does it support languages other than English?",
         answer:
-          "Yes — 32 languages are currently supported: English, Bengali, Hindi, Urdu, Chinese (Simplified and Traditional), Japanese, Korean, French, German, Spanish, Portuguese, Italian, Russian, Turkish, Dutch, Polish, Vietnamese, Greek, Hebrew, Thai, Tamil, Telugu, Kannada, Malayalam, Gujarati, Punjabi, Odia, Burmese, Georgian, and Khmer. When you upload an image, the language is detected automatically and pre-selected for you — just review it, or change it if it's wrong, before extracting. Detection works best on images with a reasonable amount of text; for a single word or short label, it may not be able to confidently identify a language, in which case you'll be asked to choose one directly rather than have it guess. Some languages also share a script that can't be told apart automatically (e.g. Latin script alone can't distinguish English from French or German), so the detected result is always a starting point you can correct, never a final answer. More languages may be added over time as they're verified against the OCR engine.",
+          "Yes — 32 languages are currently supported: English, Bengali, Hindi, Arabic, Urdu, Chinese (Simplified and Traditional), Japanese, Korean, French, German, Spanish, Portuguese, Italian, Russian, Turkish, Dutch, Polish, Vietnamese, Greek, Hebrew, Thai, Tamil, Telugu, Kannada, Malayalam, Gujarati, Punjabi, Odia, Burmese, Georgian, and Khmer. When you upload an image, the language is detected automatically and pre-selected for you — just review it, or change it if it's wrong, before extracting. Detection works best on images with a reasonable amount of text; for a single word or short label, it may not be able to confidently identify a language, in which case you'll be asked to choose one directly rather than have it guess. Some languages also share a script that can't be told apart automatically (e.g. Latin script alone can't distinguish English from French or German), so the detected result is always a starting point you can correct, never a final answer. More languages may be added over time as they're verified against the OCR engine.",
       },
     ],
   },
@@ -464,7 +479,7 @@ export const TOOLS_CONFIG: ToolConfig[] = [
     howItWorks: [
       "Upload a .txt file or drag it into the drop zone.",
       "Preview the content in the viewer.",
-      "Choose font size and page size.",
+      "Choose font size, font style and page size.",
       "Click Convert and download your PDF.",
     ],
     useCases: [
@@ -472,14 +487,29 @@ export const TOOLS_CONFIG: ToolConfig[] = [
       "Turn a plain text novel draft into a PDF for sharing.",
       "Convert exported notes from terminal to PDF.",
     ],
-    faq: [],
+    faq: [
+      {
+        question: "Does TXT to PDF support languages other than English?",
+        answer:
+          "Yes. Text made of standard Latin characters (including accented letters like é or ü) is written into the PDF as real, selectable text. If the file contains anything the built-in PDF fonts can't draw — Bengali, Hindi, Arabic, Hebrew, Chinese, Japanese, Korean, Thai, Cyrillic, Greek, letters such as ł or ş, or emoji — the tool renders the pages with your device's own fonts instead, so the text appears correctly (including joined and right-to-left scripts) but the pages are images and the text isn't selectable. A notice is shown before you convert.",
+      },
+      {
+        question: "Why do some characters appear as empty boxes?",
+        answer:
+          "For non-Latin text the PDF is drawn with fonts installed on your device. If your device has no font containing a particular character, that character shows as an empty box. Installing a font that covers the script (for example a Noto font) fixes it.",
+      },
+      {
+        question: "What file types and sizes are supported?",
+        answer: "Plain .txt files up to 5 MB. Line breaks are preserved and long lines wrap automatically.",
+      },
+    ],
   },
   {
     slug: "word-to-pdf",
     name: "Word to PDF",
-    shortDesc: "Convert DOC and DOCX files to PDF. Upload, convert, download.",
+    shortDesc: "Convert Word (.docx) documents to PDF. Upload, convert, download.",
     longDesc:
-      "Upload a Microsoft Word document and convert it to PDF in your browser using mammoth.js and jsPDF. No Word installation required, no file uploads to servers.",
+      "Upload a Word (.docx) document and convert it to PDF in your browser using mammoth.js and jsPDF. No Word installation required, no file uploads to servers.",
     category: "text-tools",
     icon: "FileOutput",
     accentColor: "blue",
@@ -487,16 +517,15 @@ export const TOOLS_CONFIG: ToolConfig[] = [
     maxFileSizeMb: 20,
     acceptedTypes: [
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "application/msword",
     ],
-    acceptedExtensions: [".docx", ".doc"],
+    acceptedExtensions: [".docx"],
     isPopular: true,
     order: 11,
-    keywords: ["word to pdf", "docx to pdf", "doc to pdf", "convert word document"],
+    keywords: ["word to pdf", "docx to pdf", "convert word document", "word document to pdf"],
     howItWorks: [
-      "Upload a .docx or .doc file.",
-      "A preview of the converted content is shown.",
+      "Upload a .docx file.",
       "Click Convert to PDF.",
+      "A preview of the converted content is shown.",
       "Download your PDF file.",
     ],
     useCases: [
@@ -509,6 +538,16 @@ export const TOOLS_CONFIG: ToolConfig[] = [
         question: "Is complex DOCX formatting preserved?",
         answer:
           "Basic formatting (headings, paragraphs, bold, italic, lists, tables) is preserved. Complex layouts with multi-column sections or advanced macros may not convert perfectly.",
+      },
+      {
+        question: "Can I convert old .doc files?",
+        answer:
+          "Not directly — this tool reads the modern .docx format only. Open the .doc file in Word, LibreOffice or Google Docs, save or export it as .docx, then upload that file.",
+      },
+      {
+        question: "Is the text in the converted PDF selectable?",
+        answer:
+          "No. The document is rendered to page images, so the PDF looks like the preview but its text can't be selected, copied or searched. Pages are split between paragraphs, list items, table rows or lines of text — never through the middle of a line — unless a single image is taller than a page.",
       },
     ],
   },
@@ -683,10 +722,6 @@ export function getToolsByCategory(category: ToolCategory): ToolConfig[] {
   return TOOLS_CONFIG.filter((t) => t.category === category).sort(
     (a, b) => a.order - b.order
   );
-}
-
-export function getFeaturedTools(): ToolConfig[] {
-  return TOOLS_CONFIG.filter((t) => t.isFeatured);
 }
 
 export function getPopularTools(limit = 6): ToolConfig[] {

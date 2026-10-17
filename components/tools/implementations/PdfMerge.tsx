@@ -11,6 +11,13 @@ import { toast } from "sonner";
 
 type ProcessState = "idle" | "processing" | "complete" | "error";
 
+class EncryptedPdfError extends Error {
+  constructor(public readonly fileName: string) {
+    super(`${fileName} is encrypted`);
+    this.name = "EncryptedPdfError";
+  }
+}
+
 export function PdfMerge() {
   const [files, setFiles] = useState<File[]>([]);
   const [state, setState] = useState<ProcessState>("idle");
@@ -61,6 +68,13 @@ export function PdfMerge() {
 
         const bytes = await files[i].arrayBuffer();
         const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+        // pdf-lib cannot decrypt content: `ignoreEncryption` only silences the
+        // "encrypted" error, and copyPages() then copies still-encrypted
+        // (unreadable) content streams — the merged PDF would contain blank
+        // pages with no warning. Stop with a clear message instead.
+        if (doc.isEncrypted) {
+          throw new EncryptedPdfError(files[i].name);
+        }
         const pages = await merged.copyPages(doc, doc.getPageIndices());
         pages.forEach((p) => merged.addPage(p));
 
@@ -80,7 +94,11 @@ export function PdfMerge() {
     } catch (err) {
       console.error(err);
       setState("error");
-      toast.error("Failed to merge PDFs. Please check the files and try again.");
+      toast.error(
+        err instanceof EncryptedPdfError
+          ? `"${err.fileName}" is encrypted/password-protected and cannot be merged. Remove its protection first (e.g. print it to a new PDF), then try again.`
+          : "Failed to merge PDFs. Please check the files and try again."
+      );
     }
   }
 

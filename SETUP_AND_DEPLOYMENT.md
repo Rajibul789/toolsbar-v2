@@ -108,6 +108,7 @@ All commands from this guide are run in that terminal.
 - Click the **Transaction** mode tab (port 6543)
 - Copy the URI — it looks like:
   `postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`
+- **Append `?pgbouncer=true`** when you use it as `DATABASE_URL` (Prisma needs it on the transaction pooler — without it you get `prepared statement "s0" already exists` errors).
 
 **Direct Connection (for `DIRECT_URL`):**
 - Click the **Session** mode tab OR scroll to find the direct connection
@@ -148,7 +149,7 @@ Then open `.env.local` in the editor and fill in every value:
 NEXT_PUBLIC_SITE_URL=https://your-project.vercel.app
 
 # Database — from Supabase (Step 4 above)
-DATABASE_URL="postgresql://postgres.[ref]:[password]@aws-0-region.pooler.supabase.com:6543/postgres"
+DATABASE_URL="postgresql://postgres.[ref]:[password]@aws-0-region.pooler.supabase.com:6543/postgres?pgbouncer=true"
 DIRECT_URL="postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres"
 
 # Supabase API keys
@@ -504,7 +505,7 @@ openssl rand -base64 32
 **Fix:** Run `npm install` again — this package is in `package.json` and will be installed.
 
 **Issue:** PDF Split not working
-**Fix:** The tool uses the internal Next.js API route `/api/pdf/split` which uses `pdf-lib`. No external service needed. Check browser console for errors.
+**Fix:** PDF Split runs entirely in your browser (pdf-lib, with a pdf.js canvas fallback) — there is no server route or external service. Check the browser console for errors. Password-protected PDFs must have the password removed first; very large PDFs (up to 50 MB) need enough free memory on your device and can take a while.
 
 **Issue:** URL Shortener returns error
 **Fix:** Verify `URL_SHORTENER_WORKER_URL` is set correctly in your Vercel environment variables.
@@ -514,4 +515,3 @@ openssl rand -base64 32
 
 **Issue:** Codespace runs out of memory during `npm install`
 **Fix:** Upgrade to a 4-core Codespace in the Codespaces settings, or run `npm install --legacy-peer-deps`.
-

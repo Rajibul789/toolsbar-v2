@@ -8,8 +8,105 @@ import { CyberScanner } from "@/components/animations/CyberScanner";
 import { ResultReveal, DownloadButton } from "@/components/tools/ResultReveal";
 import { formatBytes, downloadBlob } from "@/lib/utils";
 import { toast } from "sonner";
+import { planPages, groupIntoWindows, type BreakCandidate, type InkRect } from "@/lib/word-pdf-pagination";
+import { sanitizeDocxHtml } from "@/lib/sanitize-docx-html";
 
 type ProcessState = "idle" | "processing" | "complete" | "error";
+
+// ── Layout constants ─────────────────────────────────────────────────────────
+/** A4 content box in mm (10 mm side margins, 15 mm top/bottom). */
+const PAGE_W_MM = 190;
+const PAGE_H_MM = 267;
+const MARGIN_X_MM = 10;
+const MARGIN_Y_MM = 15;
+
+/** Render scale for html2canvas (crispness vs. memory). */
+const RENDER_SCALE = 1.8;
+
+/**
+ * Canvas safety limits. Browsers refuse (or silently blank) canvases above a
+ * platform-specific size: iOS Safari caps the *area* at 16,777,216 px, and
+ * Chrome/Firefox cap a single dimension around 16-32 k px. A whole long
+ * document rendered as ONE canvas (the previous approach) therefore failed
+ * on phones after roughly six pages. We render in windows of a few pages
+ * instead, so no canvas ever approaches these limits.
+ */
+const CANVAS_AREA_LIMIT = 16_000_000;
+const CANVAS_MAX_DIMENSION = 16_000;
+
+/** An error whose message is safe and useful to show the user verbatim. */
+class UserFacingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UserFacingError";
+  }
+}
+
+type DocKind = "docx" | "legacy-doc" | "unknown";
+
+/** Identify the file by its first bytes (the extension can lie). */
+function sniffDocKind(bytes: ArrayBuffer): DocKind {
+  const b = new Uint8Array(bytes.slice(0, 8));
+  if (b[0] === 0x50 && b[1] === 0x4b) return "docx";                       // "PK" — ZIP container (OOXML)
+  if (b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0) return "legacy-doc"; // OLE2 — binary .doc
+  return "unknown";
+}
+
+/**
+ * Measure the rendered document: where blocks end (preferred page breaks)
+ * and where lines of text / images sit (places a page must never be cut).
+ * Coordinates are CSS px relative to the container's top edge.
+ */
+function measureLayout(container: HTMLElement): {
+  candidates: BreakCandidate[];
+  inkRects: InkRect[];
+  contentBottom: number;
+} {
+  const origin = container.getBoundingClientRect().top;
+  const candidates: BreakCandidate[] = [];
+  const inkRects: InkRect[] = [];
+  let contentBottom = 0;
+
+  const tier1 = new Set<Element>(Array.from(container.children).filter((el) => el.tagName !== "STYLE"));
+  container.querySelectorAll("li, tr").forEach((el) => tier1.add(el));
+
+  const addBlock = (el: Element, tier: 1 | 2) => {
+    const r = el.getBoundingClientRect();
+    if (r.height < 1) return;
+    const bottom = r.bottom - origin;
+    candidates.push({ y: bottom, tier, keepWithNext: /^H[1-6]$/.test(el.tagName) });
+    contentBottom = Math.max(contentBottom, bottom);
+  };
+
+  tier1.forEach((el) => addBlock(el, 1));
+  container
+    .querySelectorAll("p, h1, h2, h3, h4, h5, h6, blockquote, pre, table, ul, ol")
+    .forEach((el) => { if (!tier1.has(el)) addBlock(el, 2); });
+
+  // Images are unbreakable ink.
+  container.querySelectorAll("img").forEach((img) => {
+    const r = img.getBoundingClientRect();
+    if (r.height < 1) return;
+    inkRects.push({ top: r.top - origin, bottom: r.bottom - origin });
+    contentBottom = Math.max(contentBottom, r.bottom - origin);
+  });
+
+  // One rect per line fragment of every text node.
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!n.nodeValue || !n.nodeValue.trim()) continue;
+    range.selectNodeContents(n);
+    for (const r of Array.from(range.getClientRects())) {
+      if (r.width < 0.5 || r.height < 0.5) continue;
+      inkRects.push({ top: r.top - origin, bottom: r.bottom - origin });
+      contentBottom = Math.max(contentBottom, r.bottom - origin);
+    }
+  }
+  range.detach?.();
+
+  return { candidates, inkRects, contentBottom };
+}
 
 export function WordToPdf() {
   const [file, setFile] = useState<File | null>(null);
@@ -42,18 +139,39 @@ export function WordToPdf() {
     setStatus(msgs[0]);
     const iv = setInterval(() => { mi = (mi + 1) % msgs.length; setStatus(msgs[mi]); }, 900);
 
+    let container: HTMLDivElement | null = null;
+
     try {
-      // Step 1: DOCX → HTML via mammoth
+      // Step 0: make sure this really is a .docx (mammoth cannot read the
+      // legacy binary .doc format, and the extension alone can't be trusted).
+      const bytes = await file.arrayBuffer();
+      const kind = sniffDocKind(bytes);
+      if (kind === "legacy-doc") {
+        throw new UserFacingError(
+          "This is an old binary .doc file, which can't be read in the browser. Open it in Word, LibreOffice or Google Docs, save it as .docx, and upload that."
+        );
+      }
+      if (kind === "unknown") {
+        throw new UserFacingError("This file isn't a valid .docx document (it may be corrupted or renamed from another format).");
+      }
+
+      // Step 1: DOCX → HTML via mammoth, then sanitise (mammoth output is untrusted)
       setProgress(20);
       const mammoth = await import("mammoth");
-      const bytes = await file.arrayBuffer();
-      const { value: html } = await mammoth.convertToHtml({ arrayBuffer: bytes });
+      let rawHtml: string;
+      try {
+        ({ value: rawHtml } = await mammoth.convertToHtml({ arrayBuffer: bytes }));
+      } catch (err) {
+        console.error("[WordToPdf] mammoth failed:", err);
+        throw new UserFacingError("This .docx couldn't be read. It may be corrupted or password-protected.");
+      }
+      const html = sanitizeDocxHtml(rawHtml);
       setPreviewHtml(html);
       setProgress(50);
 
       await new Promise((r) => setTimeout(r, 400));
 
-      // Step 2: HTML → PDF via jsPDF + html2canvas
+      // Step 2: HTML → PDF via html2canvas + jsPDF
       setProgress(55);
       setStatus("RENDERING HTML TO CANVAS...");
 
@@ -61,7 +179,7 @@ export function WordToPdf() {
       const { default: html2canvas } = await import("html2canvas");
 
       // Build styled container
-      const container = document.createElement("div");
+      container = document.createElement("div");
       container.style.position = "absolute";
       container.style.left = "-9999px";
       container.style.top = "0";
@@ -80,6 +198,7 @@ export function WordToPdf() {
           em{font-style:italic}
           ul,ol{padding-left:1.5em;margin-bottom:0.75em}
           li{margin-bottom:0.25em}
+          img{max-width:100%;height:auto}
           table{border-collapse:collapse;width:100%;margin-bottom:1em}
           td,th{border:1px solid #999;padding:6px 10px}
           th{background:#eee;font-weight:bold}
@@ -90,39 +209,83 @@ export function WordToPdf() {
 
       setProgress(65);
       await new Promise((r) => setTimeout(r, 200));
+      // Fonts must be settled before measuring, or line positions shift.
+      await document.fonts?.ready;
 
-      const canvas = await html2canvas(container, { scale: 1.8, backgroundColor: "#fff", useCORS: true });
-      document.body.removeChild(container);
+      // Step 3: plan page breaks that never cut through a line / row / image
+      const widthPx    = container.offsetWidth;
+      const pageHeight = Math.floor(widthPx * (PAGE_H_MM / PAGE_W_MM));
+      const mmPerPx    = PAGE_W_MM / widthPx;
+      const { candidates, inkRects, contentBottom } = measureLayout(container);
+      // Only paginate down to the last piece of content (+ a little air), so
+      // the container's bottom padding can't spill onto an empty last page.
+      const totalHeight = Math.max(
+        1,
+        Math.min(container.scrollHeight, Math.ceil(contentBottom) + 20)
+      );
+      const slices = planPages({ totalHeight, pageHeight, candidates, inkRects });
 
-      setProgress(82);
+      // Step 4: render in windows (canvas-size safe), then cut pages from them
+      const maxWindowHeight = Math.max(
+        pageHeight,
+        Math.floor(
+          Math.min(CANVAS_MAX_DIMENSION, CANVAS_AREA_LIMIT / (widthPx * RENDER_SCALE)) / RENDER_SCALE
+        )
+      );
+      const windows = groupIntoWindows(slices, maxWindowHeight);
+
+      setProgress(70);
       setStatus("ASSEMBLING PDF PAGES...");
 
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageW = 190, pageH = 267;
-      const imgW = pageW;
-      const imgH = (canvas.height * imgW) / canvas.width;
+      let pageNo = 0;
 
-      let remaining = imgH;
-      let srcY = 0;
+      for (const win of windows) {
+        const winStart = win[0].start;
+        const winEnd   = win[win.length - 1].end;
 
-      while (remaining > 0) {
-        const sliceH = Math.min(remaining, pageH);
-        const slicePx = Math.round(sliceH * (canvas.height / imgH));
-        const srcYpx = Math.round(srcY * (canvas.height / imgH));
+        const canvas = await html2canvas(container, {
+          scale: RENDER_SCALE,
+          backgroundColor: "#fff",
+          useCORS: true,
+          // Crop (relative to the container's top-left) to just this window.
+          y: winStart,
+          height: Math.ceil(winEnd - winStart),
+        });
+        if (canvas.width === 0 || canvas.height === 0) {
+          throw new Error("Rendering produced an empty canvas.");
+        }
 
-        const slice = document.createElement("canvas");
-        slice.width = canvas.width;
-        slice.height = slicePx;
-        const sCtx = slice.getContext("2d")!;
-        sCtx.fillStyle = "#fff";
-        sCtx.fillRect(0, 0, slice.width, slice.height);
-        sCtx.drawImage(canvas, 0, srcYpx, canvas.width, slicePx, 0, 0, canvas.width, slicePx);
+        for (const slice of win) {
+          const sy = Math.round((slice.start - winStart) * RENDER_SCALE);
+          const sh = Math.min(Math.round((slice.end - slice.start) * RENDER_SCALE), canvas.height - sy);
+          if (sh <= 0) continue;
 
-        pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", 10, 15, imgW, sliceH);
+          const pageCanvas = document.createElement("canvas");
+          pageCanvas.width  = canvas.width;
+          pageCanvas.height = sh;
+          const pctx = pageCanvas.getContext("2d");
+          if (!pctx) throw new Error("Canvas context unavailable");
+          pctx.fillStyle = "#fff";
+          pctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+          pctx.drawImage(canvas, 0, sy, canvas.width, sh, 0, 0, canvas.width, sh);
 
-        remaining -= sliceH;
-        srcY += sliceH;
-        if (remaining > 0) pdf.addPage();
+          if (pageNo > 0) pdf.addPage();
+          pdf.addImage(
+            pageCanvas.toDataURL("image/jpeg", 0.92),
+            "JPEG",
+            MARGIN_X_MM,
+            MARGIN_Y_MM,
+            PAGE_W_MM,
+            (slice.end - slice.start) * mmPerPx
+          );
+          pageNo++;
+          pageCanvas.width = pageCanvas.height = 0; // free the backing store
+        }
+
+        canvas.width = canvas.height = 0;
+        setProgress(70 + Math.round((pageNo / slices.length) * 25));
+        await new Promise((r) => setTimeout(r, 0)); // keep the UI responsive
       }
 
       const blob = pdf.output("blob");
@@ -132,9 +295,17 @@ export function WordToPdf() {
     } catch (err) {
       console.error(err);
       setState("error");
-      toast.error("Conversion failed. Please check the file and try again.");
+      toast.error(
+        err instanceof UserFacingError
+          ? err.message
+          : "Conversion failed. Please check the file and try again."
+      );
     } finally {
       clearInterval(iv);
+      // Always remove the off-screen render container — previously an error
+      // thrown during rendering left a 874 px-wide copy of the document in
+      // the page for the rest of the session.
+      if (container?.parentNode) container.parentNode.removeChild(container);
     }
   }
 
@@ -155,14 +326,13 @@ export function WordToPdf() {
               onDrop={onDrop}
               accept={{
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
-                "application/msword": [".doc"],
               }}
               accentColor="blue"
               currentFiles={file ? [file] : []}
               onRemoveFile={() => { setFile(null); setPreviewHtml(""); }}
               maxSizeMb={20}
-              label={<>Upload <span className="text-neon-blue">DOC or DOCX</span> file</>}
-              sublabel=".doc, .docx · Max 20MB"
+              label={<>Upload <span className="text-neon-blue">DOCX</span> file</>}
+              sublabel=".docx · Max 20MB"
             />
 
             {/* Limitation note */}
@@ -172,7 +342,8 @@ export function WordToPdf() {
             >
               <span className="text-neon-blue">ℹ</span>{" "}
               Basic formatting (headings, bold, italic, lists, tables) is preserved.
-              Complex layouts may not convert perfectly — no Word installation needed.
+              Complex layouts may not convert perfectly. Pages are exported as images, so the
+              text in the PDF is not selectable. Old .doc files must be saved as .docx first.
             </div>
 
             {file && (

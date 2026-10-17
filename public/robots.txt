@@ -1,8 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /admin/
-Disallow: /api/auth/
-Disallow: /api/admin/
-
-# Sitemap
-Sitemap: https://toolsbar.com/sitemap.xml

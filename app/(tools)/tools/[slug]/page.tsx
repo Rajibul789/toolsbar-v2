@@ -3,7 +3,9 @@ import type { Metadata, ResolvingMetadata } from "next";
 import dynamic from "next/dynamic";
 import { getToolBySlug, TOOLS_CONFIG } from "@/config/tools.config";
 import { ToolPageShell } from "@/components/tools/ToolPageShell";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { getPostsByRelatedTool } from "@/lib/data/blog";
+import { absoluteUrl } from "@/config/site.config";
 
 // Loading skeleton shown while each tool chunk loads
 function ToolSkeleton() {
@@ -95,9 +97,50 @@ export default async function ToolPage({
 
   const relatedPosts = await getPostsByRelatedTool(slug);
 
+  // Structured data is built here (server-side) so every URL uses the site's
+  // configured origin (config/site.config.ts) rather than a hardcoded domain.
+  const toolUrl = absoluteUrl(`/tools/${tool.slug}`);
+
+  const toolSchema = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: tool.name,
+    description: tool.longDesc ?? tool.shortDesc,
+    applicationCategory: "UtilitiesApplication",
+    operatingSystem: "Web Browser",
+    url: toolUrl,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    featureList: tool.howItWorks,
+  };
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home",  item: absoluteUrl("/") },
+      { "@type": "ListItem", position: 2, name: "Tools", item: absoluteUrl("/tools") },
+      { "@type": "ListItem", position: 3, name: tool.name, item: toolUrl },
+    ],
+  };
+
+  const faqSchema = tool.faq.length > 0 ? {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: tool.faq.map(({ question, answer }) => ({
+      "@type": "Question",
+      name: question,
+      acceptedAnswer: { "@type": "Answer", text: answer },
+    })),
+  } : null;
+
   return (
-    <ToolPageShell tool={tool} relatedPosts={relatedPosts}>
-      <ToolComponent />
-    </ToolPageShell>
+    <>
+      <JsonLd data={toolSchema} />
+      <JsonLd data={breadcrumbSchema} />
+      {faqSchema && <JsonLd data={faqSchema} />}
+      <ToolPageShell tool={tool} relatedPosts={relatedPosts}>
+        <ToolComponent />
+      </ToolPageShell>
+    </>
   );
 }

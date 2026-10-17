@@ -4,7 +4,15 @@ import { useState, useEffect } from "react";
 import { TrendingUp, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 
-const SEO_FIELDS = [
+type SeoField = {
+  key: string;
+  label: string;
+  defaultVal: string;
+  type: "text" | "textarea";
+  placeholder?: string;
+};
+
+const SEO_FIELDS: Array<{ group: string; fields: SeoField[] }> = [
   {
     group: "Global Defaults",
     fields: [
@@ -33,7 +41,7 @@ const SEO_FIELDS = [
     group: "Schema.org",
     fields: [
       { key: "org_name",  label: "Organization Name", defaultVal: "ToolsBar",               type: "text" },
-      { key: "org_url",   label: "Organization URL",  defaultVal: "https://toolsbar.com",   type: "text" },
+      { key: "org_url",   label: "Organization URL",  defaultVal: "",                       type: "text", placeholder: "Leave blank to use this site's configured domain (NEXT_PUBLIC_SITE_URL)" },
       { key: "org_email", label: "Contact Email",     defaultVal: "hello@toolsbar.com",     type: "text" },
     ],
   },
@@ -119,7 +127,7 @@ export default function AdminSeoPage() {
               {group}
             </h2>
             <div className="glass-panel p-6 space-y-5">
-              {fields.map(({ key, label, type }) => (
+              {fields.map(({ key, label, type, placeholder }) => (
                 <div key={key}>
                   <label className="text-xs font-mono text-text-muted uppercase tracking-wider block mb-2">
                     {label}
@@ -129,6 +137,7 @@ export default function AdminSeoPage() {
                       value={val(key)}
                       onChange={(e) => change(key, e.target.value)}
                       rows={3}
+                      placeholder={placeholder}
                       className="input-cyber w-full text-sm resize-none"
                     />
                   ) : (
@@ -136,6 +145,7 @@ export default function AdminSeoPage() {
                       type="text"
                       value={val(key)}
                       onChange={(e) => change(key, e.target.value)}
+                      placeholder={placeholder}
                       className="input-cyber w-full text-sm"
                     />
                   )}

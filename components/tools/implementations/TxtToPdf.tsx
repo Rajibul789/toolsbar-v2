@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FileType, Eye } from "lucide-react";
 import { UploadZone } from "@/components/tools/UploadZone";
@@ -8,6 +8,7 @@ import { CyberScanner } from "@/components/animations/CyberScanner";
 import { ResultReveal, DownloadButton } from "@/components/tools/ResultReveal";
 import { readFileAsText, downloadBlob } from "@/lib/utils";
 import { toast } from "sonner";
+import { normalizePlainText, needsUnicodeRendering, renderPlainTextPages } from "@/lib/txt-pdf-raster";
 
 type ProcessState = "idle" | "preview" | "processing" | "complete" | "error";
 type PageSize = "a4" | "letter";
@@ -48,6 +49,53 @@ export function TxtToPdf() {
       const margin = 15;
       const maxW = pageW - margin * 2;
 
+      // Line endings, tabs and control characters are normalised first: a
+      // stray "\r" (Windows files) is not a line break to jsPDF.
+      const clean = normalizePlainText(text);
+
+      if (needsUnicodeRendering(clean)) {
+        // ── Unicode path ────────────────────────────────────────────────────
+        // jsPDF's built-in fonts can only draw Latin-1 / Windows-1252, so
+        // Bengali, Hindi, Arabic, CJK, Cyrillic, Greek, emoji... would come out
+        // missing or garbled. Draw the pages with the browser's text engine
+        // (proper shaping, per-character font fallback, bidi) and embed them.
+        setStatus("RENDERING UNICODE TEXT...");
+        const pdf = new jsPDF({
+          orientation: "portrait",
+          unit: "mm",
+          format: pageSize,
+          compress: true,
+        });
+        const w = pdf.internal.pageSize.getWidth();
+        const h = pdf.internal.pageSize.getHeight();
+
+        await renderPlainTextPages(
+          clean,
+          { pageWidthMm: w, pageHeightMm: h, marginMm: margin, fontSizePt: fontSize, fontFamily },
+          (cw, ch) => {
+            const c = document.createElement("canvas");
+            c.width = cw;
+            c.height = ch;
+            return c;
+          },
+          (canvas, index, total) => {
+            if (index > 0) pdf.addPage();
+            pdf.addImage(canvas.toDataURL("image/jpeg", 0.9), "JPEG", 0, 0, w, h);
+            setProgress(40 + Math.round(((index + 1) / total) * 50));
+            setStatus(`RENDERING PAGE ${index + 1} OF ${total}...`);
+          }
+        );
+
+        setProgress(95);
+        setStatus("FINALIZING PDF...");
+        const blob = pdf.output("blob");
+        setResult(blob);
+        setProgress(100);
+        setState("complete");
+        return;
+      }
+
+      // ── Latin path (unchanged): real, selectable text in the PDF ───────────
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: pageSize });
       pdf.setFont(fontFamily);
       pdf.setFontSize(fontSize);
@@ -55,7 +103,7 @@ export function TxtToPdf() {
       setProgress(50);
       setStatus("PAGINATING CONTENT...");
 
-      const lines = pdf.splitTextToSize(text, maxW) as string[];
+      const lines = pdf.splitTextToSize(clean, maxW) as string[];
       const lineH = fontSize * 0.4;
       const linesPerPage = Math.floor((pageH - margin * 2) / lineH);
 
@@ -97,6 +145,7 @@ export function TxtToPdf() {
     setProgress(0);
   }
 
+  const usesUnicodeRendering = useMemo(() => needsUnicodeRendering(normalizePlainText(text)), [text]);
   const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
   const lineCount = text.split("\n").length;
 
@@ -150,6 +199,19 @@ export function TxtToPdf() {
                 spellCheck={false}
               />
             </div>
+
+            {usesUnicodeRendering && (
+              <div
+                className="rounded-lg px-4 py-3 text-xs font-mono text-text-muted"
+                style={{ background: "rgba(255,204,0,0.05)", border: "1px solid rgba(255,204,0,0.2)" }}
+              >
+                <span className="text-neon-yellow">ℹ</span>{" "}
+                This file contains characters the standard PDF fonts can&apos;t draw (for example
+                Bengali, Hindi, Arabic, Chinese, Cyrillic or Greek text). Its pages will be rendered
+                as images using the fonts installed on your device, so the text will look right but
+                won&apos;t be selectable or searchable.
+              </div>
+            )}
 
             {/* Settings */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
@@ -227,7 +289,7 @@ export function TxtToPdf() {
                   <p className="text-xs font-mono text-text-muted">PDF generated</p>
                 </div>
                 <DownloadButton
-                  onClick={() => downloadBlob(result, (file?.name ?? "file").replace(".txt", ".pdf"))}
+                  onClick={() => downloadBlob(result, (file?.name ?? "file").replace(/\.txt$/i, "") + ".pdf")}
                   label="Download PDF"
                   color="cyan"
                   className="w-full sm:flex-1"

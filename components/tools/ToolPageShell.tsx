@@ -7,7 +7,6 @@ import * as LucideIcons from "lucide-react";
 import type { ToolConfig } from "@/config/tools.config";
 import { NEON_COLOR_MAP, NEON_BG_CLASS, NEON_BORDER_CLASS, TOOLS_CONFIG } from "@/config/tools.config";
 import { ToolCard } from "@/components/tools/ToolCard";
-import { JsonLd } from "@/components/seo/JsonLd";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToolsStore } from "@/stores/toolsStore";
 import { toast } from "sonner";
@@ -58,45 +57,8 @@ export function ToolPageShell({ tool, relatedPosts = [], children }: ToolPageShe
     .filter((t) => t.category === tool.category && t.slug !== tool.slug)
     .slice(0, 4);
 
-  // JSON-LD
-  const toolSchema = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: tool.name,
-    description: tool.longDesc ?? tool.shortDesc,
-    applicationCategory: "UtilitiesApplication",
-    operatingSystem: "Web Browser",
-    url: `https://toolsbar.com/tools/${tool.slug}`,
-    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-    featureList: tool.howItWorks,
-  };
-
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home",  item: "https://toolsbar.com" },
-      { "@type": "ListItem", position: 2, name: "Tools", item: "https://toolsbar.com/tools" },
-      { "@type": "ListItem", position: 3, name: tool.name, item: `https://toolsbar.com/tools/${tool.slug}` },
-    ],
-  };
-
-  const faqSchema = tool.faq.length > 0 ? {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: tool.faq.map(({ question, answer }) => ({
-      "@type": "Question",
-      name: question,
-      acceptedAnswer: { "@type": "Answer", text: answer },
-    })),
-  } : null;
-
   return (
     <>
-      <JsonLd data={toolSchema} />
-      <JsonLd data={breadcrumbSchema} />
-      {faqSchema && <JsonLd data={faqSchema} />}
-
       <div className="min-h-screen pt-16">
         {/* Tool header */}
         <div className="relative overflow-hidden border-b py-10"

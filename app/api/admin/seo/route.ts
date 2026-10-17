@@ -33,6 +33,15 @@ const patchSchema = z.object({
   value: z.string(),
 });
 
+function isHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value.trim());
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export async function PATCH(req: NextRequest) {
   const cookieStore = await cookies();
   const token = cookieStore.get("admin_token")?.value;
@@ -43,17 +52,33 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const updates = Array.isArray(body) ? body : [body];
 
+    // Validate everything up-front so a bad value is rejected with a 400 and
+    // nothing is partially written.
+    const items: Array<{ key: string; value: string }> = [];
+    for (const item of updates) {
+      const parsed = patchSchema.safeParse(item);
+      if (!parsed.success) {
+        return NextResponse.json({ error: "Invalid SEO setting payload." }, { status: 400 });
+      }
+      // org_url feeds the Organization JSON-LD, so it must be blank (= use the
+      // configured site URL) or a real absolute http(s) URL.
+      if (parsed.data.key === "org_url" && parsed.data.value.trim() !== "" && !isHttpUrl(parsed.data.value)) {
+        return NextResponse.json(
+          { error: "Organization URL must be blank or a full http(s) URL, e.g. https://example.com" },
+          { status: 400 }
+        );
+      }
+      items.push(parsed.data);
+    }
+
     const results = await Promise.all(
-      updates.map(async (item: unknown) => {
-        const parsed = patchSchema.safeParse(item);
-        if (!parsed.success) throw new Error(`Invalid item: ${JSON.stringify(item)}`);
-        const { key, value } = parsed.data;
-        return prisma.seoSetting.upsert({
+      items.map(({ key, value }) =>
+        prisma.seoSetting.upsert({
           where:  { key },
           update: { value },
           create: { key, value },
-        });
-      })
+        })
+      )
     );
 
     // Invalidate all pages that use SEO settings

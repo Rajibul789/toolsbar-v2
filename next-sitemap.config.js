@@ -24,9 +24,44 @@ const PATH_CONFIG = {
   "/cookie-policy":  { priority: 0.4,  changefreq: "yearly"  },
 };
 
+/**
+ * Site origin — MUST mirror resolveSiteUrl() in config/site.config.ts
+ * (same priority order and validation). It is duplicated here only because
+ * this file runs as plain CommonJS after `next build` and cannot import the
+ * TypeScript config.
+ *   1. NEXT_PUBLIC_SITE_URL  2. VERCEL_PROJECT_PRODUCTION_URL
+ *   3. VERCEL_URL            4. last resort https://toolsbar.com
+ * (The localhost dev fallback in site.config.ts is irrelevant here: this file only
+ * runs after a production build.)
+ */
+function toOrigin(raw) {
+  const value = raw && raw.trim();
+  if (!value) return null;
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveSiteUrl() {
+  const resolved =
+    toOrigin(process.env.NEXT_PUBLIC_SITE_URL) ||
+    toOrigin(process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
+    toOrigin(process.env.VERCEL_URL);
+  if (resolved) return resolved;
+  console.warn(
+    "[next-sitemap] NEXT_PUBLIC_SITE_URL is not set and no Vercel URL was detected — " +
+      "sitemap URLs fall back to https://toolsbar.com. Set NEXT_PUBLIC_SITE_URL to this deployment's real domain."
+  );
+  return "https://toolsbar.com";
+}
+
 module.exports = {
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) || (process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`) || "https://toolsbar.com",
-  generateRobotsTxt: false, // managed manually
+  siteUrl: resolveSiteUrl(),
+  generateRobotsTxt: false, // served by app/robots.ts (uses the configured site URL)
   generateIndexSitemap: true,
   changefreq: "weekly",
   priority: 0.7,

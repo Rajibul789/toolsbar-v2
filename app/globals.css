@@ -1,11 +1,19 @@
+/* ============================================================
+   FONTS — Orbitron (display) + JetBrains Mono (mono)
+
+   An @import is only valid BEFORE every other rule. It used to sit below
+   the three @tailwind directives, so browsers silently ignored it and these
+   two families never loaded (everything fell back to the generic monospace).
+
+   Inter is NOT imported here: it is already self-hosted through next/font in
+   app/layout.tsx (exposed as --font-inter), so importing it again would
+   download it twice.
+   ============================================================ */
+@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* ============================================================
-   FONTS
-   ============================================================ */
-@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Inter:wght@300;400;500;600;700;800&display=swap");
 
 /* ============================================================
    CSS CUSTOM PROPERTIES (DESIGN TOKENS)
@@ -43,7 +51,7 @@
   /* Fonts */
   --font-display: "Orbitron", monospace;
   --font-mono:    "JetBrains Mono", monospace;
-  --font-body:    "Inter", sans-serif;
+  --font-body:    var(--font-inter), "Inter", sans-serif;
 }
 
 /* ============================================================

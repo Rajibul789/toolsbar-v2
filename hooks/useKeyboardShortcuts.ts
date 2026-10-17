@@ -57,11 +57,21 @@ export function useKeyboardShortcuts(extraShortcuts: Shortcut[] = []) {
 
       for (const shortcut of allShortcuts) {
         const keyMatch = e.key.toLowerCase() === shortcut.key.toLowerCase();
-        const metaMatch = shortcut.meta ? e.metaKey || e.ctrlKey : true;
-        const ctrlMatch = shortcut.ctrl ? e.ctrlKey : !shortcut.ctrl || e.ctrlKey;
-        const shiftMatch = shortcut.shift ? e.shiftKey : !shortcut.shift || true;
 
-        if (keyMatch && (shortcut.meta ? e.metaKey || e.ctrlKey : !e.metaKey && !e.ctrlKey) && shiftMatch) {
+        // Exactly one modifier rule applies per shortcut:
+        //  - meta: Cmd (macOS) or Ctrl (Windows/Linux)
+        //  - ctrl: Ctrl only (previously ignored, so ctrl-only shortcuts never fired)
+        //  - neither: no Cmd/Ctrl held, so plain keys don't hijack browser shortcuts
+        const modifierMatch = shortcut.meta
+          ? e.metaKey || e.ctrlKey
+          : shortcut.ctrl
+            ? e.ctrlKey && !e.metaKey
+            : !e.metaKey && !e.ctrlKey;
+        // Shift is only enforced when a shortcut asks for it (some layouts need
+        // Shift to type keys like "/", so it is otherwise ignored).
+        const shiftMatch = shortcut.shift ? e.shiftKey : true;
+
+        if (keyMatch && modifierMatch && shiftMatch) {
           if (shortcut.meta || shortcut.ctrl) e.preventDefault();
           shortcut.action();
           break;
