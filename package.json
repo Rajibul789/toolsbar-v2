@@ -3,21 +3,25 @@
   "version": "2.0.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/copy-qpdf-wasm.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-qpdf-wasm.mjs",
     "build": "next build",
     "postbuild": "next-sitemap",
     "start": "next start",
     "lint": "next lint",
+    "test": "tsx --test tests/pdf-split/*.test.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:migrate": "prisma migrate dev",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate && node scripts/copy-qpdf-wasm.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
     "@napi-rs/canvas": "^1.0.2",
+    "@neslinesli93/qpdf-wasm": "0.3.0",
     "@prisma/client": "^6.0.0",
     "@radix-ui/react-accordion": "^1.2.1",
     "@radix-ui/react-dialog": "^1.1.2",

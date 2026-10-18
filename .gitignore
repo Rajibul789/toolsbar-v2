@@ -60,6 +60,9 @@ next-env.d.ts
 /public/sitemap.xml
 /public/sitemap-*.xml
 
+# Copied from node_modules by scripts/copy-qpdf-wasm.mjs
+/public/vendor/
+
 # Misc
 .turbo
 *.log

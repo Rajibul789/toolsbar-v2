@@ -104,11 +104,11 @@ export const TOOLS_CONFIG: ToolConfig[] = [
     name: "PDF Split",
     shortDesc: "Extract individual pages or page ranges from any PDF file.",
     longDesc:
-      "Our PDF Split tool lets you break any PDF into individual pages or custom page ranges — completely free, with no file uploads. Your document never leaves your device.",
+      "Our PDF Split tool lets you break any PDF into individual pages or custom page ranges — completely free. Everything is processed in your browser, so your document stays on your device. Encrypted and unusual PDFs are handled too, and if your device ever can't cope with a file you can choose to have our server process it instead.",
     category: "pdf-tools",
     icon: "Scissors",
     accentColor: "cyan",
-    processingMode: "browser",
+    processingMode: "hybrid",
     maxFileSizeMb: 50,
     acceptedTypes: ["application/pdf"],
     acceptedExtensions: [".pdf"],
@@ -119,7 +119,7 @@ export const TOOLS_CONFIG: ToolConfig[] = [
     howItWorks: [
       "Upload your PDF file by dragging it into the drop zone.",
       "Select the pages or ranges you want to extract.",
-      "Click Split — processing happens entirely in your browser.",
+      "Click Split — processing happens in your browser (enter the password if the PDF asks for one).",
       "Download individual pages or a zip of all selected pages.",
     ],
     useCases: [
@@ -135,17 +135,27 @@ export const TOOLS_CONFIG: ToolConfig[] = [
       {
         question: "Does my file get uploaded to a server?",
         answer:
-          "No. PDF Split runs entirely in your browser — your file is never uploaded anywhere, whatever its size.",
+          "Not by default. PDF Split runs in your browser and the file stays on your device. Only if your browser genuinely cannot process a particular PDF (for example it runs out of memory) are you offered a server fallback — and nothing is uploaded unless you click to agree. In that case the file is sent over HTTPS to private temporary storage, processed, and deleted as soon as your results are downloaded (abandoned uploads are removed automatically within an hour).",
       },
       {
         question: "What is the maximum PDF size I can split?",
         answer:
-          "PDFs up to 50 MB are accepted. Because everything is processed on your own device, very large or image-heavy files take longer and need more free memory — keep the tab open until it finishes.",
+          "PDFs up to 50 MB are accepted. Everything is first processed on your own device, so very large or image-heavy files take longer and need more free memory — keep the tab open until it finishes.",
       },
       {
-        question: "What happens with password-protected PDFs?",
+        question: "Are encrypted and password-protected PDFs supported?",
         answer:
-          "PDFs that open without a password but restrict printing or copying are supported: their pages are rendered as images so the content is preserved (those pages are not text-selectable). A PDF that needs a password just to open can't be read — remove the password first.",
+          "Yes. PDFs that open without a password but restrict printing or copying are decrypted and split in your browser, and the text stays selectable. If a PDF needs a password to open, you'll be asked for it; it is used only to unlock the file in your current session and is never stored or logged. A wrong password is reported clearly.",
+      },
+      {
+        question: "Will the text in the split pages stay selectable?",
+        answer:
+          "Yes for almost every PDF: pages are extracted structurally, so text, fonts, links and the page size are preserved, and each output page contains only its own content. In rare cases where a page can't be extracted that way, it is rendered as an image instead — it looks identical but its text can't be selected — and you are told which.",
+      },
+      {
+        question: "Which PDFs can't be split?",
+        answer:
+          "Files that are too badly damaged to read (for example cut off before the page index), files that aren't really PDFs, and password-protected files if the password is unknown. You'll get a specific message rather than blank pages.",
       },
     ],
   },

@@ -184,7 +184,7 @@ export function ToolPageShell({ tool, relatedPosts = [], children }: ToolPageShe
                 <p className="text-xs font-mono text-text-muted leading-relaxed">
                   {tool.processingMode === "browser"
                     ? "This tool runs 100% in your browser. Your files never leave your device."
-                    : "Processing happens locally when possible. Server fallback deletes files immediately."}
+                    : "Processing happens in your browser. If your device can't handle a file, a server fallback is offered — only with your permission, and files are deleted right after."}
                 </p>
               </div>
             </div>

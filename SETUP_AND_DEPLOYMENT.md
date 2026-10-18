@@ -505,7 +505,7 @@ openssl rand -base64 32
 **Fix:** Run `npm install` again — this package is in `package.json` and will be installed.
 
 **Issue:** PDF Split not working
-**Fix:** PDF Split runs entirely in your browser (pdf-lib, with a pdf.js canvas fallback) — there is no server route or external service. Check the browser console for errors. Password-protected PDFs must have the password removed first; very large PDFs (up to 50 MB) need enough free memory on your device and can take a while.
+**Fix:** PDF Split runs in your browser first (qpdf WebAssembly, pdf-lib and pdf.js). Check the browser console and that `/vendor/qpdf/qpdf.wasm` loads (it is copied from `node_modules` by `npm install` / `npm run dev` / `npm run build`). A PDF that needs a password to open prompts for it. Very large PDFs (up to 50 MB) need free memory on the device; if the browser cannot cope, the tool offers an optional server fallback (see **PDF Split server fallback** below).
 
 **Issue:** URL Shortener returns error
 **Fix:** Verify `URL_SHORTENER_WORKER_URL` is set correctly in your Vercel environment variables.
@@ -515,3 +515,38 @@ openssl rand -base64 32
 
 **Issue:** Codespace runs out of memory during `npm install`
 **Fix:** Upgrade to a 4-core Codespace in the Codespaces settings, or run `npm install --legacy-peer-deps`.
+
+
+
+---
+
+## PDF Split server fallback (optional)
+
+PDF Split processes files **in the browser**. When the browser genuinely cannot handle a PDF
+(for example it runs out of memory), the user is asked whether to process it on the server.
+Nothing is uploaded unless they click to agree.
+
+**Why Supabase Storage?** Vercel limits request *and* response bodies to 4.5 MB, so a PDF can
+neither be posted to a function nor returned from one. Instead the browser uploads directly to a
+**private** storage bucket through a short-lived signed URL, the function reads it from there, writes the
+split pages back, and the browser downloads them through signed URLs.
+
+**Enable it** — nothing to create by hand:
+
+1. Make sure these are set (they are already used by blog image uploads):
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+2. Optional: `PDF_SPLIT_BUCKET` (default `pdf-split-temp`). The private bucket is created automatically on first use.
+3. Supabase's per-file upload limit must allow 50 MB (the free plan's maximum is 50 MB).
+
+**Privacy and cleanup:** the uploaded original is deleted as soon as it has been processed, the results are
+deleted when the browser has downloaded them, and anything abandoned is swept after one hour (the sweep runs
+whenever a new upload is requested). Passwords are used only in memory for that request and are never stored or logged.
+
+**Disable it:** leave `SUPABASE_SERVICE_ROLE_KEY` unset; the tool then simply never offers the fallback.
+
+**Limits to know:** the processing route is set to a 60-second maximum duration (valid on every Vercel plan;
+raise `maxDuration` in `app/api/pdf/split/process/route.ts` if your plan allows more). The built-in rate limit
+(10 uploads/hour per IP) is per server instance — use Vercel Firewall/WAF or a shared store if you need hard limits.
+
+**Tests:** `npm test` runs the PDF Split suite (ordinary, large, complex, encrypted, corrupted and
+browser-to-server fallback cases).
